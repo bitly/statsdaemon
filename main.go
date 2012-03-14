@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -14,9 +13,8 @@ import (
 )
 
 const (
-	TCP    = "tcp"
-	UDP    = "udp"
-	SECOND = 1e9
+	TCP = "tcp"
+	UDP = "udp"
 )
 
 type Packet struct {
@@ -29,7 +27,7 @@ type Packet struct {
 var (
 	serviceAddress  = flag.String("address", ":8125", "UDP service address")
 	graphiteAddress = flag.String("graphie", "localhost:2003",
-		"Graphite service address")
+				"Graphite service address")
 	flushInterval    = flag.Int64("flush-interval", 10, "Flush interval")
 	percentThreshold = flag.Int("percent-threshold", 90, "Threshold percent")
 )
@@ -41,11 +39,11 @@ var (
 )
 
 func monitor() {
-	var err os.Error
+	var err error
 	if err != nil {
 		log.Println(err)
 	}
-	t := time.NewTicker(*flushInterval * SECOND)
+	t := time.NewTicker(time.Duration(*flushInterval) * time.Second)
 	for {
 		select {
 		case <-t.C:
@@ -73,10 +71,10 @@ func submit() {
 	client, err := net.Dial(TCP, *graphiteAddress)
 	if client != nil {
 		numStats := 0
-		now := time.Seconds()
+		now := time.Now()
 		buffer := bytes.NewBufferString("")
 		for s, c := range counters {
-			value := int64(c) / ((*flushInterval * SECOND) / 1e3)
+			value := int64(c) / ((*flushInterval * int64(time.Second)) / 1e3)
 			fmt.Fprintf(buffer, "stats.%s %d %d\n", s, value, now)
 			fmt.Fprintf(buffer, "stats_counts.%s %d %d\n", s, c, now)
 			counters[s] = 0
@@ -86,7 +84,7 @@ func submit() {
 			if len(t) > 0 {
 				sort.Ints(t)
 				min := t[0]
-				max := t[len(t) - 1]
+				max := t[len(t)-1]
 				mean := min
 				maxAtThreshold := max
 				count := len(t)
@@ -118,7 +116,7 @@ func submit() {
 		client.Write(buffer.Bytes())
 		client.Close()
 	} else {
-		log.Printf(err.String())
+		log.Printf(err.Error())
 	}
 }
 
@@ -137,7 +135,7 @@ func handleMessage(conn *net.UDPConn, remaddr net.Addr, buf *bytes.Buffer) {
 			}
 		}
 
-		sampleRate, err := strconv.Atof32(item[5])
+		sampleRate, err := strconv.ParseFloat(item[5], 32)
 		if err != nil {
 			sampleRate = 1
 		}
@@ -145,7 +143,7 @@ func handleMessage(conn *net.UDPConn, remaddr net.Addr, buf *bytes.Buffer) {
 		packet.Bucket = item[1]
 		packet.Value = value
 		packet.Modifier = item[3]
-		packet.Sampling = sampleRate
+		packet.Sampling = float32(sampleRate)
 		In <- packet
 	}
 }
@@ -154,7 +152,7 @@ func udpListener() {
 	address, _ := net.ResolveUDPAddr(UDP, *serviceAddress)
 	listener, err := net.ListenUDP(UDP, address)
 	if err != nil {
-		log.Fatalf("ListenAndServe: %s", err.String())
+		log.Fatalf("ListenAndServe: %s", err.Error())
 	}
 	for {
 		message := make([]byte, 512)
