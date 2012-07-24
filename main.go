@@ -12,11 +12,6 @@ import (
 	"time"
 )
 
-const (
-	TCP = "tcp"
-	UDP = "udp"
-)
-
 type Packet struct {
 	Bucket   string
 	Value    int
@@ -24,12 +19,31 @@ type Packet struct {
 	Sampling float32
 }
 
+type Percentiles []int
+
+func (a *Percentiles) Set(s string) error {
+	i, err := strconv.Atoi(s)
+	if err != nil {
+		return err
+	}
+	*a = append(*a, i)
+	return nil
+}
+func (a *Percentiles) String() string {
+	return fmt.Sprintf("%v", *a)
+}
+
+
 var (
 	serviceAddress   = flag.String("address", ":8125", "UDP service address")
 	graphiteAddress  = flag.String("graphite", "127.0.0.1:2003", "Graphite service address (or - to dissable)")
 	flushInterval    = flag.Int64("flush-interval", 10, "Flush interval (seconds)")
-	percentThreshold = flag.Int("percent-threshold", 90, "Threshold percent")
+	percentThreshold = Percentiles{}
 )
+
+func init() {
+	flag.Var(&percentThreshold, "percent-threshold", "Threshold percent (may be given multiple times)")
+}
 
 var (
 	In       = make(chan *Packet, 1000)
@@ -66,7 +80,7 @@ func monitor() {
 }
 
 func submit() {
-	client, err := net.Dial(TCP, *graphiteAddress)
+	client, err := net.Dial("tcp", *graphiteAddress)
 	if err != nil {
 		log.Printf("Error dialing", err.Error())
 		return
@@ -77,22 +91,22 @@ func submit() {
 	now := time.Now().Unix()
 	buffer := bytes.NewBufferString("")
 	for s, c := range counters {
-		if c == 0 {
+		if c == -1 {
 			continue
 		}
 		valuePerSecond := int64(c) / *flushInterval
 		fmt.Fprintf(buffer, "stats.%s %d %d\n", s, valuePerSecond, now)
 		fmt.Fprintf(buffer, "stats_counts.%s %d %d\n", s, c, now)
-		counters[s] = 0
+		counters[s] = -1
 		numStats++
 	}
 
 	for g, c := range gauges {
-		if c == 0 {
+		if c == -1 {
 			continue
 		}
 		fmt.Fprintf(buffer, "stats.gauges.%s %d %d\n", g, c, now)
-		gauges[g] = 0
+		gauges[g] = -1
 		numStats++
 	}
 
@@ -105,24 +119,42 @@ func submit() {
 			mean := min
 			maxAtThreshold := max
 			count := len(t)
-			if len(t) > 1 {
-				var thresholdIndex int
-				thresholdIndex = ((100 - *percentThreshold) / 100) * count
-				numInThreshold := count - thresholdIndex
-				values := t[0:numInThreshold]
-
-				sum := 0
-				for i := 0; i < numInThreshold; i++ {
-					sum += values[i]
+			sum := max
+			
+			cumulativeValues := make([]int, len(t))
+			last := 0
+			for i, tt := range t {
+				if i == 0 {
+					cumulativeValues[i] = tt
+				} else {
+					cumulativeValues[i] = last + tt
 				}
-				mean = sum / numInThreshold
+				last = tt
 			}
+			
+			for _, pct := range percentThreshold {
+				
+				if len(t) > 1 {
+					var thresholdIndex int
+					thresholdIndex = ((100 - pct) / 100) * count
+					numInThreshold := count - thresholdIndex
+					maxAtThreshold = t[numInThreshold - 1]
+					sum = cumulativeValues[numInThreshold - 1]
+					mean = sum / numInThreshold
+				}
+				
+				fmt.Fprintf(buffer, "stats.timers.%s.mean_%d %d %d\n", u, pct, mean, now)
+				fmt.Fprintf(buffer, "stats.timers.%s.upper_%d %d %d\n", u, pct, maxAtThreshold, now)
+				fmt.Fprintf(buffer, "stats.timers.%s.sum_%d %d %d\n", u, pct, sum, now)
+			}
+			
+			sum = cumulativeValues[len(t)-1]
+
 			var z []int
 			timers[u] = z
 
 			fmt.Fprintf(buffer, "stats.timers.%s.mean %d %d\n", u, mean, now)
 			fmt.Fprintf(buffer, "stats.timers.%s.upper %d %d\n", u, max, now)
-			fmt.Fprintf(buffer, "stats.timers.%s.upper_%d %d %d\n", u, *percentThreshold, maxAtThreshold, now)
 			fmt.Fprintf(buffer, "stats.timers.%s.lower %d %d\n", u, min, now)
 			fmt.Fprintf(buffer, "stats.timers.%s.count %d %d\n", u, count, now)
 		}
@@ -140,7 +172,7 @@ func submit() {
 func parseMessage(buf *bytes.Buffer) []*Packet {
 	var sanitizeRegexp = regexp.MustCompile("[^a-zA-Z0-9\\-_\\.:\\|@]")
 	var packetRegexp = regexp.MustCompile("([a-zA-Z0-9_]+):([0-9]+)\\|(g|c|ms)(\\|@([0-9\\.]+))?")
-	log.Printf("got %s", buf.String())
+	
 	s := sanitizeRegexp.ReplaceAllString(buf.String(), "")
 
 	var output []*Packet
@@ -172,9 +204,9 @@ func parseMessage(buf *bytes.Buffer) []*Packet {
 }
 
 func udpListener() {
-	address, _ := net.ResolveUDPAddr(UDP, *serviceAddress)
+	address, _ := net.ResolveUDPAddr("udp", *serviceAddress)
 	log.Printf("Listening on %s", address)
-	listener, err := net.ListenUDP(UDP, address)
+	listener, err := net.ListenUDP("udp", address)
 	if err != nil {
 		log.Fatalf("ListenAndServe: %s", err.Error())
 	}
