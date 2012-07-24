@@ -37,7 +37,7 @@ func (a *Percentiles) String() string {
 
 var (
 	serviceAddress   = flag.String("address", ":8125", "UDP service address")
-	graphiteAddress  = flag.String("graphite", "127.0.0.1:2003", "Graphite service address (or - to dissable)")
+	graphiteAddress  = flag.String("graphite", "127.0.0.1:2003", "Graphite service address (or - to disable)")
 	flushInterval    = flag.Int64("flush-interval", 10, "Flush interval (seconds)")
 	showVersion      = flag.Bool("version", false, "print version string")
 	percentThreshold = Percentiles{}
