@@ -32,17 +32,17 @@ var (
 )
 
 var (
-	In       = make(chan Packet, 10000)
+	In       = make(chan *Packet, 1000)
 	counters = make(map[string]int)
 	gauges   = make(map[string]int)
 	timers   = make(map[string][]int)
 )
 
 func monitor() {
-	t := time.NewTicker(time.Duration(*flushInterval) * time.Second)
+	ticker := time.NewTicker(time.Duration(*flushInterval) * time.Second)
 	for {
 		select {
-		case <-t.C:
+		case <-ticker.C:
 			submit()
 		case s := <-In:
 			if s.Modifier == "ms" {
@@ -137,13 +137,13 @@ func submit() {
 
 }
 
-func handleMessage(conn *net.UDPConn, remaddr net.Addr, buf *bytes.Buffer) {
-	var packet Packet
+func parseMessage(buf *bytes.Buffer) []*Packet {
 	var sanitizeRegexp = regexp.MustCompile("[^a-zA-Z0-9\\-_\\.:\\|@]")
 	var packetRegexp = regexp.MustCompile("([a-zA-Z0-9_]+):([0-9]+)\\|(g|c|ms)(\\|@([0-9\\.]+))?")
 	log.Printf("got %s", buf.String())
 	s := sanitizeRegexp.ReplaceAllString(buf.String(), "")
 
+	var output []*Packet
 	for _, item := range packetRegexp.FindAllStringSubmatch(s, -1) {
 		value, err := strconv.Atoi(item[2])
 		if err != nil {
@@ -160,12 +160,15 @@ func handleMessage(conn *net.UDPConn, remaddr net.Addr, buf *bytes.Buffer) {
 			sampleRate = 1
 		}
 
-		packet.Bucket = item[1]
-		packet.Value = value
-		packet.Modifier = item[3]
-		packet.Sampling = float32(sampleRate)
-		In <- packet
+		packet := &Packet{
+			Bucket:   item[1],
+			Value:    value,
+			Modifier: item[3],
+			Sampling: float32(sampleRate),
+		}
+		output = append(output, packet)
 	}
+	return output
 }
 
 func udpListener() {
@@ -176,14 +179,18 @@ func udpListener() {
 		log.Fatalf("ListenAndServe: %s", err.Error())
 	}
 	defer listener.Close()
+	message := make([]byte, 512)
 	for {
-		message := make([]byte, 512)
-		n, remaddr, error := listener.ReadFrom(message)
-		if error != nil {
+		n, remaddr, err := listener.ReadFrom(message)
+		if err != nil {
+			log.Printf("error reading from %v %s", remaddr, err.Error())
 			continue
 		}
 		buf := bytes.NewBuffer(message[0:n])
-		go handleMessage(listener, remaddr, buf)
+		packets := parseMessage(buf)
+		for _, p := range packets {
+			In <- p
+		}
 	}
 }
 
