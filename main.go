@@ -12,6 +12,8 @@ import (
 	"time"
 )
 
+const VERSION = "0.2"
+
 type Packet struct {
 	Bucket   string
 	Value    int
@@ -33,11 +35,11 @@ func (a *Percentiles) String() string {
 	return fmt.Sprintf("%v", *a)
 }
 
-
 var (
 	serviceAddress   = flag.String("address", ":8125", "UDP service address")
 	graphiteAddress  = flag.String("graphite", "127.0.0.1:2003", "Graphite service address (or - to dissable)")
 	flushInterval    = flag.Int64("flush-interval", 10, "Flush interval (seconds)")
+	showVersion      = flag.Bool("version", false, "print version string")
 	percentThreshold = Percentiles{}
 )
 
@@ -120,7 +122,7 @@ func submit() {
 			maxAtThreshold := max
 			count := len(t)
 			sum := max
-			
+
 			cumulativeValues := make([]int, len(t))
 			last := 0
 			for i, tt := range t {
@@ -131,23 +133,23 @@ func submit() {
 				}
 				last = tt
 			}
-			
+
 			for _, pct := range percentThreshold {
-				
+
 				if len(t) > 1 {
 					var thresholdIndex int
 					thresholdIndex = ((100 - pct) / 100) * count
 					numInThreshold := count - thresholdIndex
-					maxAtThreshold = t[numInThreshold - 1]
-					sum = cumulativeValues[numInThreshold - 1]
+					maxAtThreshold = t[numInThreshold-1]
+					sum = cumulativeValues[numInThreshold-1]
 					mean = sum / numInThreshold
 				}
-				
+
 				fmt.Fprintf(buffer, "stats.timers.%s.mean_%d %d %d\n", u, pct, mean, now)
 				fmt.Fprintf(buffer, "stats.timers.%s.upper_%d %d %d\n", u, pct, maxAtThreshold, now)
 				fmt.Fprintf(buffer, "stats.timers.%s.sum_%d %d %d\n", u, pct, sum, now)
 			}
-			
+
 			sum = cumulativeValues[len(t)-1]
 
 			var z []int
@@ -172,7 +174,7 @@ func submit() {
 func parseMessage(buf *bytes.Buffer) []*Packet {
 	var sanitizeRegexp = regexp.MustCompile("[^a-zA-Z0-9\\-_\\.:\\|@]")
 	var packetRegexp = regexp.MustCompile("([a-zA-Z0-9_]+):([0-9]+)\\|(g|c|ms)(\\|@([0-9\\.]+))?")
-	
+
 	s := sanitizeRegexp.ReplaceAllString(buf.String(), "")
 
 	var output []*Packet
@@ -228,6 +230,10 @@ func udpListener() {
 
 func main() {
 	flag.Parse()
+	if *showVersion {
+		fmt.Printf("gographite v%s\n", VERSION)
+		return
+	}
 	go udpListener()
 	monitor()
 }
