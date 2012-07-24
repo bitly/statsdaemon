@@ -158,6 +158,7 @@ func submit() {
 			fmt.Fprintf(buffer, "stats.timers.%s.mean %d %d\n", u, mean, now)
 			fmt.Fprintf(buffer, "stats.timers.%s.upper %d %d\n", u, max, now)
 			fmt.Fprintf(buffer, "stats.timers.%s.lower %d %d\n", u, min, now)
+			fmt.Fprintf(buffer, "stats.timers.%s.sum %d %d\n", u, sum, now)
 			fmt.Fprintf(buffer, "stats.timers.%s.count %d %d\n", u, count, now)
 		}
 	}
