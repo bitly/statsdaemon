@@ -177,11 +177,9 @@ func parseMessage(buf *bytes.Buffer) []*Packet {
 	var packetRegexp = regexp.MustCompile("([a-zA-Z0-9_\\.]+):([0-9]+)\\|(g|c|ms)(\\|@([0-9\\.]+))?")
 
 	s := sanitizeRegexp.ReplaceAllString(buf.String(), "")
-    log.Println("s = ", s)
 
 	var output []*Packet
 	for _, item := range packetRegexp.FindAllStringSubmatch(s, -1) {
-        log.Println("item: ", item)
 		value, err := strconv.Atoi(item[2])
 		if err != nil {
 			// todo print out this error
