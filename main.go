@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-const VERSION = "0.2"
+const VERSION = "0.3"
 
 type Packet struct {
 	Bucket   string
@@ -97,8 +97,8 @@ func submit() {
 			continue
 		}
 		valuePerSecond := int64(c) / *flushInterval
-		fmt.Fprintf(buffer, "stats.counters.%s.rate %d %d\n", s, valuePerSecond, now)
-		fmt.Fprintf(buffer, "stats.counters.%s.count %d %d\n", s, c, now)
+		fmt.Fprintf(buffer, "%s.rate %d %d\n", s, valuePerSecond, now)
+		fmt.Fprintf(buffer, "%s.count %d %d\n", s, c, now)
 		counters[s] = -1
 		numStats++
 	}
@@ -107,7 +107,7 @@ func submit() {
 		if c == -1 {
 			continue
 		}
-		fmt.Fprintf(buffer, "stats.gauges.%s %d %d\n", g, c, now)
+		fmt.Fprintf(buffer, "%s %d %d\n", g, c, now)
 		gauges[g] = -1
 		numStats++
 	}
@@ -145,9 +145,9 @@ func submit() {
 					mean = sum / numInThreshold
 				}
 
-				fmt.Fprintf(buffer, "stats.timers.%s.mean_%d %d %d\n", u, pct, mean, now)
-				fmt.Fprintf(buffer, "stats.timers.%s.upper_%d %d %d\n", u, pct, maxAtThreshold, now)
-				fmt.Fprintf(buffer, "stats.timers.%s.sum_%d %d %d\n", u, pct, sum, now)
+				fmt.Fprintf(buffer, "%s.mean_%d %d %d\n", u, pct, mean, now)
+				fmt.Fprintf(buffer, "%s.upper_%d %d %d\n", u, pct, maxAtThreshold, now)
+				fmt.Fprintf(buffer, "%s.sum_%d %d %d\n", u, pct, sum, now)
 			}
 
 			sum = cumulativeValues[len(t)-1]
@@ -155,11 +155,11 @@ func submit() {
 			var z []int
 			timers[u] = z
 
-			fmt.Fprintf(buffer, "stats.timers.%s.mean %d %d\n", u, mean, now)
-			fmt.Fprintf(buffer, "stats.timers.%s.upper %d %d\n", u, max, now)
-			fmt.Fprintf(buffer, "stats.timers.%s.lower %d %d\n", u, min, now)
-			fmt.Fprintf(buffer, "stats.timers.%s.sum %d %d\n", u, sum, now)
-			fmt.Fprintf(buffer, "stats.timers.%s.count %d %d\n", u, count, now)
+			fmt.Fprintf(buffer, "%s.mean %d %d\n", u, mean, now)
+			fmt.Fprintf(buffer, "%s.upper %d %d\n", u, max, now)
+			fmt.Fprintf(buffer, "%s.lower %d %d\n", u, min, now)
+			fmt.Fprintf(buffer, "%s.sum %d %d\n", u, sum, now)
+			fmt.Fprintf(buffer, "%s.count %d %d\n", u, count, now)
 		}
 	}
 	if numStats == 0 {
@@ -174,12 +174,14 @@ func submit() {
 
 func parseMessage(buf *bytes.Buffer) []*Packet {
 	var sanitizeRegexp = regexp.MustCompile("[^a-zA-Z0-9\\-_\\.:\\|@]")
-	var packetRegexp = regexp.MustCompile("([a-zA-Z0-9_]+):([0-9]+)\\|(g|c|ms)(\\|@([0-9\\.]+))?")
+	var packetRegexp = regexp.MustCompile("([a-zA-Z0-9_\\.]+):([0-9]+)\\|(g|c|ms)(\\|@([0-9\\.]+))?")
 
 	s := sanitizeRegexp.ReplaceAllString(buf.String(), "")
+    log.Println("s = ", s)
 
 	var output []*Packet
 	for _, item := range packetRegexp.FindAllStringSubmatch(s, -1) {
+        log.Println("item: ", item)
 		value, err := strconv.Atoi(item[2])
 		if err != nil {
 			// todo print out this error
