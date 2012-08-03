@@ -96,9 +96,7 @@ func submit() {
 		if c == -1 {
 			continue
 		}
-		valuePerSecond := int64(c) / *flushInterval
-		fmt.Fprintf(buffer, "%s.rate %d %d\n", s, valuePerSecond, now)
-		fmt.Fprintf(buffer, "%s.count %d %d\n", s, c, now)
+		fmt.Fprintf(buffer, "%s %d %d\n", s, c, now)
 		counters[s] = -1
 		numStats++
 	}
