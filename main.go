@@ -6,13 +6,18 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
+	"os/signal"
 	"regexp"
 	"sort"
 	"strconv"
+	"syscall"
 	"time"
 )
 
-const VERSION = "0.3"
+const VERSION = "0.4"
+
+var signalchan chan os.Signal
 
 type Packet struct {
 	Bucket   string
@@ -58,6 +63,10 @@ func monitor() {
 	ticker := time.NewTicker(time.Duration(*flushInterval) * time.Second)
 	for {
 		select {
+		case sig := <-signalchan:
+			fmt.Printf("!! Caught signal %d... shutting down\n", sig)
+			submit()
+			return
 		case <-ticker.C:
 			submit()
 		case s := <-In:
@@ -233,6 +242,9 @@ func main() {
 		fmt.Printf("gographite v%s\n", VERSION)
 		return
 	}
+	signalchan = make(chan os.Signal, 1)
+	signal.Notify(signalchan, syscall.SIGTERM)
+
 	go udpListener()
 	monitor()
 }
