@@ -80,8 +80,8 @@ func monitor() {
 			} else if s.Modifier == "g" {
 				gauges[s.Bucket] = int(s.Value)
 			} else {
-				_, ok := counters[s.Bucket]
-				if !ok {
+				v, ok := counters[s.Bucket]
+				if !ok || v == -1 {
 					counters[s.Bucket] = 0
 				}
 				counters[s.Bucket] += int(float32(s.Value) * (1 / s.Sampling))
