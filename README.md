@@ -6,6 +6,8 @@ Port of Etsy's statsd (https://github.com/etsy/statsd), written in Go.
 * supports Timing, Counters, Gauges, Sampling
 * supports percentage values
 
+[![Build Status](https://secure.travis-ci.org/bitly/gographite.png)](http://travis-ci.org/bitly/gographite)
+
 Command Line Options
 ====================
 

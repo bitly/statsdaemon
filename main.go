@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-const VERSION = "0.4"
+const VERSION = "0.4.1"
 
 var signalchan chan os.Signal
 
@@ -180,35 +180,44 @@ func submit() {
 }
 
 func parseMessage(buf *bytes.Buffer) []*Packet {
-	var sanitizeRegexp = regexp.MustCompile("[^a-zA-Z0-9\\-_\\.:\\|@]")
-	var packetRegexp = regexp.MustCompile("([a-zA-Z0-9_\\.]+):([0-9]+)\\|(g|c|ms)(\\|@([0-9\\.]+))?")
-
-	s := sanitizeRegexp.ReplaceAllString(buf.String(), "")
+	var packetRegexp = regexp.MustCompile("^([^:]+):([0-9]+)\\|(g|c|ms)(\\|@([0-9\\.]+))?\n?$")
 
 	var output []*Packet
-	for _, item := range packetRegexp.FindAllStringSubmatch(s, -1) {
-		value, err := strconv.Atoi(item[2])
+	var err error
+	var line string
+	for {
 		if err != nil {
-			// todo print out this error
-			if item[3] == "ms" {
-				value = 0
-			} else {
-				value = 1
+			break
+		}
+		line, err = buf.ReadString('\n')
+		if line != "" {
+			item := packetRegexp.FindStringSubmatch(line)
+			if len(item) == 0 {
+				continue
 			}
-		}
+			value, err := strconv.Atoi(item[2])
+			if err != nil {
+				// todo print out this error
+				if item[3] == "ms" {
+					value = 0
+				} else {
+					value = 1
+				}
+			}
 
-		sampleRate, err := strconv.ParseFloat(item[5], 32)
-		if err != nil {
-			sampleRate = 1
-		}
+			sampleRate, err := strconv.ParseFloat(item[5], 32)
+			if err != nil {
+				sampleRate = 1
+			}
 
-		packet := &Packet{
-			Bucket:   item[1],
-			Value:    value,
-			Modifier: item[3],
-			Sampling: float32(sampleRate),
+			packet := &Packet{
+				Bucket:   item[1],
+				Value:    value,
+				Modifier: item[3],
+				Sampling: float32(sampleRate),
+			}
+			output = append(output, packet)
 		}
-		output = append(output, packet)
 	}
 	return output
 }
