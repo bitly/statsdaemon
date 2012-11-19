@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-const VERSION = "0.4.1"
+const VERSION = "0.4.2"
 
 var signalchan chan os.Signal
 
@@ -125,21 +125,9 @@ func submit() {
 			sort.Ints(t)
 			min := t[0]
 			max := t[len(t)-1]
-			mean := min
+			mean := t[len(t)/2]
 			maxAtThreshold := max
 			count := len(t)
-			sum := max
-
-			cumulativeValues := make([]int, len(t))
-			last := 0
-			for i, tt := range t {
-				if i == 0 {
-					cumulativeValues[i] = tt
-				} else {
-					cumulativeValues[i] = last + tt
-				}
-				last = tt
-			}
 
 			for _, pct := range percentThreshold {
 
@@ -148,16 +136,10 @@ func submit() {
 					thresholdIndex = ((100 - pct) / 100) * count
 					numInThreshold := count - thresholdIndex
 					maxAtThreshold = t[numInThreshold-1]
-					sum = cumulativeValues[numInThreshold-1]
-					mean = sum / numInThreshold
 				}
 
-				fmt.Fprintf(buffer, "%s.mean_%d %d %d\n", u, pct, mean, now)
 				fmt.Fprintf(buffer, "%s.upper_%d %d %d\n", u, pct, maxAtThreshold, now)
-				fmt.Fprintf(buffer, "%s.sum_%d %d %d\n", u, pct, sum, now)
 			}
-
-			sum = cumulativeValues[len(t)-1]
 
 			var z []int
 			timers[u] = z
@@ -165,7 +147,6 @@ func submit() {
 			fmt.Fprintf(buffer, "%s.mean %d %d\n", u, mean, now)
 			fmt.Fprintf(buffer, "%s.upper %d %d\n", u, max, now)
 			fmt.Fprintf(buffer, "%s.lower %d %d\n", u, min, now)
-			fmt.Fprintf(buffer, "%s.sum %d %d\n", u, sum, now)
 			fmt.Fprintf(buffer, "%s.count %d %d\n", u, count, now)
 		}
 	}
@@ -173,7 +154,6 @@ func submit() {
 		return
 	}
 	log.Printf("got %d stats", numStats)
-	fmt.Fprintf(buffer, "statsd.numStats %d %d\n", numStats, now)
 	data := buffer.Bytes()
 	client.Write(data)
 
