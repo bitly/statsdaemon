@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
 	"net"
 	"os"
 	"os/signal"
@@ -26,14 +27,14 @@ type Packet struct {
 	Sampling float32
 }
 
-type Percentiles []int
+type Percentiles []float64
 
 func (a *Percentiles) Set(s string) error {
-	i, err := strconv.Atoi(s)
+	f, err := strconv.ParseFloat(s, 64)
 	if err != nil {
 		return err
 	}
-	*a = append(*a, i)
+	*a = append(*a, f)
 	return nil
 }
 func (a *Percentiles) String() string {
@@ -138,10 +139,11 @@ func submit() {
 			for _, pct := range percentThreshold {
 
 				if len(t) > 1 {
-					var thresholdIndex int
-					thresholdIndex = ((100 - pct) / 100) * count
-					numInThreshold := count - thresholdIndex
-					maxAtThreshold = t[numInThreshold-1]
+					indexOfPerc := int(math.Ceil(((pct / 100.0) * float64(count)) + 0.5))
+					if indexOfPerc >= count {
+						indexOfPerc = count - 1
+					}
+					maxAtThreshold = t[indexOfPerc]
 				}
 
 				fmt.Fprintf(buffer, "%s.upper_%d %d %d\n", u, pct, maxAtThreshold, now)
