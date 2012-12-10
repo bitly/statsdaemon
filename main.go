@@ -44,6 +44,7 @@ var (
 	serviceAddress   = flag.String("address", ":8125", "UDP service address")
 	graphiteAddress  = flag.String("graphite", "127.0.0.1:2003", "Graphite service address (or - to disable)")
 	flushInterval    = flag.Int64("flush-interval", 10, "Flush interval (seconds)")
+	debug            = flag.Bool("debug", false, "print statistics sent to graphite")
 	showVersion      = flag.Bool("version", false, "print version string")
 	percentThreshold = Percentiles{}
 )
@@ -93,14 +94,19 @@ func monitor() {
 func submit() {
 	client, err := net.Dial("tcp", *graphiteAddress)
 	if err != nil {
-		log.Printf("Error dialing", err.Error())
-		return
+		log.Printf("Error dialing %s %s", *graphiteAddress, err.Error())
+		if *debug == false {
+			return
+		} else {
+			log.Printf("WARNING: in debug mode. resetting counters even though connection to graphite failed")
+		}
+	} else {
+		defer client.Close()
 	}
-	defer client.Close()
 
 	numStats := 0
 	now := time.Now().Unix()
-	buffer := bytes.NewBufferString("")
+	buffer := bytes.NewBuffer([]byte{})
 	for s, c := range counters {
 		if c == -1 {
 			continue
@@ -153,10 +159,21 @@ func submit() {
 	if numStats == 0 {
 		return
 	}
-	log.Printf("got %d stats", numStats)
 	data := buffer.Bytes()
-	client.Write(data)
-
+	if client != nil {
+		log.Printf("sent %d stats to %s", numStats, *graphiteAddress)
+		client.Write(data)
+	}
+	if *debug {
+		lines := bytes.NewBuffer(data)
+		for {
+			line, err := lines.ReadString([]byte("\n")[0])
+			if line == "" || err != nil {
+				break
+			}
+			log.Printf("debug: %s", line)
+		}
+	}
 }
 
 func parseMessage(buf *bytes.Buffer) []*Packet {
