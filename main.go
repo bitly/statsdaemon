@@ -17,7 +17,7 @@ import (
 	"time"
 )
 
-const VERSION = "0.4.3"
+const VERSION = "0.4.4"
 
 var signalchan chan os.Signal
 
@@ -55,6 +55,7 @@ var (
 	flushInterval    = flag.Int64("flush-interval", 10, "Flush interval (seconds)")
 	debug            = flag.Bool("debug", false, "print statistics sent to graphite")
 	showVersion      = flag.Bool("version", false, "print version string")
+	persistCountKeys = flag.Int("persist-count-keys", 60, "number of flush-interval's to persist count keys")
 	percentThreshold = Percentiles{}
 )
 
@@ -91,7 +92,7 @@ func monitor() {
 				gauges[s.Bucket] = int(s.Value)
 			} else {
 				v, ok := counters[s.Bucket]
-				if !ok || v == -1 {
+				if !ok || v < 0 {
 					counters[s.Bucket] = 0
 				}
 				counters[s.Bucket] += int(float32(s.Value) * (1 / s.Sampling))
@@ -116,12 +117,20 @@ func submit() {
 	numStats := 0
 	now := time.Now().Unix()
 	buffer := bytes.NewBuffer([]byte{})
+
+	// continue sending zeros for counters for a short period of time
+	// even if we have no new data. for more context see https://github.com/bitly/gographite/pull/8
 	for s, c := range counters {
-		if c == -1 {
+		switch {
+		case c <= *persistCountKeys:
 			continue
+		case c < 0:
+			counters[s] -= 1
+			fmt.Fprintf(buffer, "%s %d %d\n", s, 0, now)
+		case c >= 0:
+			counters[s] = -1
+			fmt.Fprintf(buffer, "%s %d %d\n", s, c, now)
 		}
-		fmt.Fprintf(buffer, "%s %d %d\n", s, c, now)
-		counters[s] = -1
 		numStats++
 	}
 
@@ -260,6 +269,7 @@ func main() {
 	}
 	signalchan = make(chan os.Signal, 1)
 	signal.Notify(signalchan, syscall.SIGTERM)
+	*persistCountKeys = -1 * (*persistCountKeys)
 
 	go udpListener()
 	monitor()
