@@ -1,18 +1,26 @@
-gographite
+statsdaemon
 ==========
 
-Port of Etsy's statsd (https://github.com/etsy/statsd), written in Go.
+Port of Etsy's statsd (https://github.com/etsy/statsd), written in Go (originally based 
+on [amir/gographite](https://github.com/amir/gographite)).
 
 * supports Timing, Counters, Gauges, Sampling
 * supports percentage values
 
-[![Build Status](https://secure.travis-ci.org/bitly/gographite.png)](http://travis-ci.org/bitly/gographite)
+[![Build Status](https://secure.travis-ci.org/bitly/statsdaemon.png)](http://travis-ci.org/bitly/statsdaemon)
+
+Installing
+==========
+
+```bash
+go get github.com/bitly/statsdaemon
+```
 
 Command Line Options
 ====================
 
 ```
-Usage of ./gographite:
+Usage of ./statsdaemon:
   -address=":8125": UDP service address
   -debug=false: print statistics sent to graphite
   -flush-interval=10: Flush interval (seconds)

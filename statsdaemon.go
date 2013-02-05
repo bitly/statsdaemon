@@ -29,8 +29,9 @@ type Packet struct {
 }
 
 type Uint64Slice []uint64
-func (s Uint64Slice) Len() int        { return len(s) }
-func (s Uint64Slice) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+
+func (s Uint64Slice) Len() int           { return len(s) }
+func (s Uint64Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s Uint64Slice) Less(i, j int) bool { return s[i] < s[j] }
 
 type Percentiles []*Percentile
@@ -100,7 +101,7 @@ func monitor() {
 				if !ok || v < 0 {
 					counters[s.Bucket] = 0
 				}
-				counters[s.Bucket] += int64(float64(s.Value.(int64)) * float64(1 / s.Sampling))
+				counters[s.Bucket] += int64(float64(s.Value.(int64)) * float64(1/s.Sampling))
 			}
 		}
 	}
@@ -124,7 +125,7 @@ func submit() {
 	buffer := bytes.NewBuffer([]byte{})
 
 	// continue sending zeros for counters for a short period of time
-	// even if we have no new data. for more context see https://github.com/bitly/gographite/pull/8
+	// even if we have no new data. for more context see https://github.com/bitly/statsdaemon/pull/8
 	for s, c := range counters {
 		switch {
 		case c <= *persistCountKeys:
@@ -282,7 +283,7 @@ func udpListener() {
 func main() {
 	flag.Parse()
 	if *showVersion {
-		fmt.Printf("gographite v%s\n", VERSION)
+		fmt.Printf("statsdaemon v%s\n", VERSION)
 		return
 	}
 	signalchan = make(chan os.Signal, 1)
