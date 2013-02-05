@@ -23,10 +23,15 @@ var signalchan chan os.Signal
 
 type Packet struct {
 	Bucket   string
-	Value    int
+	Value    interface{}
 	Modifier string
 	Sampling float32
 }
+
+type Uint64Slice []uint64
+func (s Uint64Slice) Len() int        { return len(s) }
+func (s Uint64Slice) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+func (s Uint64Slice) Less(i, j int) bool { return s[i] < s[j] }
 
 type Percentiles []*Percentile
 type Percentile struct {
@@ -55,7 +60,7 @@ var (
 	flushInterval    = flag.Int64("flush-interval", 10, "Flush interval (seconds)")
 	debug            = flag.Bool("debug", false, "print statistics sent to graphite")
 	showVersion      = flag.Bool("version", false, "print version string")
-	persistCountKeys = flag.Int("persist-count-keys", 60, "number of flush-interval's to persist count keys")
+	persistCountKeys = flag.Int64("persist-count-keys", 60, "number of flush-interval's to persist count keys")
 	percentThreshold = Percentiles{}
 )
 
@@ -65,9 +70,9 @@ func init() {
 
 var (
 	In       = make(chan *Packet, 1000)
-	counters = make(map[string]int)
-	gauges   = make(map[string]int)
-	timers   = make(map[string][]int)
+	counters = make(map[string]int64)
+	gauges   = make(map[string]uint64)
+	timers   = make(map[string]Uint64Slice)
 )
 
 func monitor() {
@@ -84,18 +89,18 @@ func monitor() {
 			if s.Modifier == "ms" {
 				_, ok := timers[s.Bucket]
 				if !ok {
-					var t []int
+					var t Uint64Slice
 					timers[s.Bucket] = t
 				}
-				timers[s.Bucket] = append(timers[s.Bucket], s.Value)
+				timers[s.Bucket] = append(timers[s.Bucket], s.Value.(uint64))
 			} else if s.Modifier == "g" {
-				gauges[s.Bucket] = int(s.Value)
+				gauges[s.Bucket] = uint64(s.Value.(int64))
 			} else {
 				v, ok := counters[s.Bucket]
 				if !ok || v < 0 {
 					counters[s.Bucket] = 0
 				}
-				counters[s.Bucket] += int(float32(s.Value) * (1 / s.Sampling))
+				counters[s.Bucket] += int64(float64(s.Value.(int64)) * float64(1 / s.Sampling))
 			}
 		}
 	}
@@ -135,18 +140,18 @@ func submit() {
 	}
 
 	for g, c := range gauges {
-		if c == -1 {
+		if c == math.MaxUint64 {
 			continue
 		}
 		fmt.Fprintf(buffer, "%s %d %d\n", g, c, now)
-		gauges[g] = -1
+		gauges[g] = math.MaxUint64
 		numStats++
 	}
 
 	for u, t := range timers {
 		if len(t) > 0 {
 			numStats++
-			sort.Ints(t)
+			sort.Sort(t)
 			min := t[0]
 			max := t[len(t)-1]
 			mean := t[len(t)/2]
@@ -166,7 +171,7 @@ func submit() {
 				fmt.Fprintf(buffer, "%s.upper_%s %d %d\n", u, pct.str, maxAtThreshold, now)
 			}
 
-			var z []int
+			var z Uint64Slice
 			timers[u] = z
 
 			fmt.Fprintf(buffer, "%s.mean %d %d\n", u, mean, now)
@@ -211,10 +216,23 @@ func parseMessage(buf *bytes.Buffer) []*Packet {
 			if len(item) == 0 {
 				continue
 			}
-			value, err := strconv.Atoi(item[2])
+
+			var value interface{}
+			modifier := item[3]
+			switch modifier {
+			case "c":
+				value, err = strconv.ParseInt(item[2], 10, 64)
+				if err != nil {
+					log.Printf("ERROR: failed to ParseInt %s - %s", item[2], err.Error())
+				}
+			default:
+				value, err = strconv.ParseUint(item[2], 10, 64)
+				if err != nil {
+					log.Printf("ERROR: failed to ParseUint %s - %s", item[2], err.Error())
+				}
+			}
 			if err != nil {
-				// todo print out this error
-				if item[3] == "ms" {
+				if modifier == "ms" {
 					value = 0
 				} else {
 					value = 1
@@ -229,7 +247,7 @@ func parseMessage(buf *bytes.Buffer) []*Packet {
 			packet := &Packet{
 				Bucket:   item[1],
 				Value:    value,
-				Modifier: item[3],
+				Modifier: modifier,
 				Sampling: float32(sampleRate),
 			}
 			output = append(output, packet)
