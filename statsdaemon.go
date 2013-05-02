@@ -95,7 +95,7 @@ func monitor() {
 				}
 				timers[s.Bucket] = append(timers[s.Bucket], s.Value.(uint64))
 			} else if s.Modifier == "g" {
-				gauges[s.Bucket] = uint64(s.Value.(int64))
+				gauges[s.Bucket] = s.Value.(uint64)
 			} else {
 				v, ok := counters[s.Bucket]
 				if !ok || v < 0 {
