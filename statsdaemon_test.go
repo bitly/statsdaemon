@@ -35,6 +35,15 @@ func TestPacketParse(t *testing.T) {
 	assert.Equal(t, "c", packet.Modifier)
 	assert.Equal(t, float32(1), packet.Sampling)
 
+	d = []byte("gorets:-4|c")
+	packets = parseMessage(bytes.NewBuffer(d))
+	assert.Equal(t, len(packets), 1)
+	packet = packets[0]
+	assert.Equal(t, "gorets", packet.Bucket)
+	assert.Equal(t, int64(-4), packet.Value.(int64))
+	assert.Equal(t, "c", packet.Modifier)
+	assert.Equal(t, float32(1), packet.Sampling)
+
 	d = []byte("glork:320|ms")
 	packets = parseMessage(bytes.NewBuffer(d))
 	assert.Equal(t, len(packets), 1)

@@ -202,7 +202,7 @@ func submit() {
 }
 
 func parseMessage(buf *bytes.Buffer) []*Packet {
-	var packetRegexp = regexp.MustCompile("^([^:]+):([0-9]+)\\|(g|c|ms)(\\|@([0-9\\.]+))?\n?$")
+	var packetRegexp = regexp.MustCompile("^([^:]+):(-?[0-9]+)\\|(g|c|ms)(\\|@([0-9\\.]+))?\n?$")
 
 	var output []*Packet
 	var err error
