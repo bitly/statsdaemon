@@ -17,7 +17,7 @@ import (
 	"time"
 )
 
-const VERSION = "0.5"
+const VERSION = "0.5.1"
 
 var signalchan chan os.Signal
 
@@ -121,9 +121,34 @@ func submit() {
 	}
 
 	numStats := 0
-	now := time.Now().Unix()
 	buffer := bytes.NewBuffer([]byte{})
+	now := time.Now().Unix()
 
+	processCounters(buffer, &numStats, now)
+	processGauges(buffer, &numStats, now)
+	processTimers(buffer, &numStats, now)
+
+	if numStats == 0 {
+		return
+	}
+	data := buffer.Bytes()
+	if client != nil {
+		log.Printf("sent %d stats to %s", numStats, *graphiteAddress)
+		client.Write(data)
+	}
+	if *debug {
+		lines := bytes.NewBuffer(data)
+		for {
+			line, err := lines.ReadString([]byte("\n")[0])
+			if line == "" || err != nil {
+				break
+			}
+			log.Printf("debug: %s", line)
+		}
+	}
+}
+
+func processCounters(buffer *bytes.Buffer, numStats *int, now int64) {
 	// continue sending zeros for counters for a short period of time
 	// even if we have no new data. for more context see https://github.com/bitly/statsdaemon/pull/8
 	for s, c := range counters {
@@ -137,27 +162,36 @@ func submit() {
 			counters[s] = -1
 			fmt.Fprintf(buffer, "%s %d %d\n", s, c, now)
 		}
-		numStats++
+		*numStats++
 	}
+}
 
+func processGauges(buffer *bytes.Buffer, numStats *int, now int64) {
 	for g, c := range gauges {
 		if c == math.MaxUint64 {
 			continue
 		}
 		fmt.Fprintf(buffer, "%s %d %d\n", g, c, now)
 		gauges[g] = math.MaxUint64
-		numStats++
+		*numStats++
 	}
+}
 
+func processTimers(buffer *bytes.Buffer, numStats *int, now int64) {
 	for u, t := range timers {
 		if len(t) > 0 {
-			numStats++
+			*numStats++
 			sort.Sort(t)
 			min := t[0]
 			max := t[len(t)-1]
-			mean := t[len(t)/2]
 			maxAtThreshold := max
 			count := len(t)
+
+			sum := uint64(0)
+			for _, value := range t {
+				sum += value
+			}
+			mean := float64(sum) / float64(len(t))
 
 			for _, pct := range percentThreshold {
 
@@ -179,24 +213,6 @@ func submit() {
 			fmt.Fprintf(buffer, "%s.upper %d %d\n", u, max, now)
 			fmt.Fprintf(buffer, "%s.lower %d %d\n", u, min, now)
 			fmt.Fprintf(buffer, "%s.count %d %d\n", u, count, now)
-		}
-	}
-	if numStats == 0 {
-		return
-	}
-	data := buffer.Bytes()
-	if client != nil {
-		log.Printf("sent %d stats to %s", numStats, *graphiteAddress)
-		client.Write(data)
-	}
-	if *debug {
-		lines := bytes.NewBuffer(data)
-		for {
-			line, err := lines.ReadString([]byte("\n")[0])
-			if line == "" || err != nil {
-				break
-			}
-			log.Printf("debug: %s", line)
 		}
 	}
 }
