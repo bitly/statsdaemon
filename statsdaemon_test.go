@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"github.com/bmizerany/assert"
+	"regexp"
 	"testing"
+	"time"
 )
 
 func TestPacketParse(t *testing.T) {
@@ -84,4 +86,24 @@ func TestPacketParse(t *testing.T) {
 	d = []byte("a.key.with-0.dash:4")
 	packets = parseMessage(bytes.NewBuffer(d))
 	assert.Equal(t, len(packets), 0)
+}
+
+func TestMean(t *testing.T) {
+	// Some data with expected mean of 20
+	d := []byte("response_time:0|ms\nresponse_time:30|ms\nresponse_time:30|ms")
+	packets := parseMessage(bytes.NewBuffer(d))
+
+	for _, s := range packets {
+		timers[s.Bucket] = append(timers[s.Bucket], s.Value.(uint64))
+	}
+
+	buff := bytes.NewBuffer([]byte{})
+	numStats := 0
+	processTimers(buff, &numStats, time.Now().Unix())
+	assert.Equal(t, numStats, 1)
+	dataForGraphite := buff.String()
+	meanRegexp := regexp.MustCompile("response_time.mean.*float64=20")
+
+	matched := meanRegexp.MatchString(dataForGraphite)
+	assert.Equal(t, matched, true)
 }
