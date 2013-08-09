@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -17,7 +18,7 @@ import (
 	"time"
 )
 
-const VERSION = "0.5.1"
+const VERSION = "0.5.2-alpha"
 
 var signalchan chan os.Signal
 
@@ -108,47 +109,48 @@ func monitor() {
 }
 
 func submit() {
-	client, err := net.Dial("tcp", *graphiteAddress)
-	if err != nil {
-		log.Printf("Error dialing %s %s", *graphiteAddress, err.Error())
-		if *debug == false {
-			return
-		} else {
-			log.Printf("WARNING: in debug mode. resetting counters even though connection to graphite failed")
-		}
-	} else {
-		defer client.Close()
-	}
+	var buffer bytes.Buffer
+	var num int64
 
-	numStats := 0
-	buffer := bytes.NewBuffer([]byte{})
 	now := time.Now().Unix()
 
-	processCounters(buffer, &numStats, now)
-	processGauges(buffer, &numStats, now)
-	processTimers(buffer, &numStats, now)
-
-	if numStats == 0 {
+	client, err := net.Dial("tcp", *graphiteAddress)
+	if err != nil {
+		log.Printf("ERROR: dialing %s - %s", *graphiteAddress, err)
+		if *debug {
+			log.Printf("WARNING: resetting counters when in debug mode")
+			processCounters(&buffer, now)
+			processGauges(&buffer, now)
+			processTimers(&buffer, now)
+		}
 		return
 	}
-	data := buffer.Bytes()
-	if client != nil {
-		log.Printf("sent %d stats to %s", numStats, *graphiteAddress)
-		client.Write(data)
+	defer client.Close()
+
+	num += processCounters(&buffer, now)
+	num += processGauges(&buffer, now)
+	num += processTimers(&buffer, now)
+	if num == 0 {
+		return
 	}
+
 	if *debug {
-		lines := bytes.NewBuffer(data)
-		for {
-			line, err := lines.ReadString([]byte("\n")[0])
-			if line == "" || err != nil {
-				break
-			}
-			log.Printf("debug: %s", line)
+		for _, line := range bytes.Split(buffer.Bytes(), []byte("\n")) {
+			log.Printf("DEBUG: %s", line)
 		}
 	}
+
+	_, err = client.Write(buffer.Bytes())
+	if err != nil {
+		log.Printf("ERROR: failed to write stats - %s", err)
+		return
+	}
+
+	log.Printf("sent %d stats to %s", num, *graphiteAddress)
 }
 
-func processCounters(buffer *bytes.Buffer, numStats *int, now int64) {
+func processCounters(buffer *bytes.Buffer, now int64) int64 {
+	var num int64
 	// continue sending zeros for counters for a short period of time
 	// even if we have no new data. for more context see https://github.com/bitly/statsdaemon/pull/8
 	for s, c := range counters {
@@ -162,25 +164,30 @@ func processCounters(buffer *bytes.Buffer, numStats *int, now int64) {
 			counters[s] = -1
 			fmt.Fprintf(buffer, "%s %d %d\n", s, c, now)
 		}
-		*numStats++
+		num++
 	}
+	return num
 }
 
-func processGauges(buffer *bytes.Buffer, numStats *int, now int64) {
+func processGauges(buffer *bytes.Buffer, now int64) int64 {
+	var num int64
 	for g, c := range gauges {
 		if c == math.MaxUint64 {
 			continue
 		}
 		fmt.Fprintf(buffer, "%s %d %d\n", g, c, now)
 		gauges[g] = math.MaxUint64
-		*numStats++
+		num++
 	}
+	return num
 }
 
-func processTimers(buffer *bytes.Buffer, numStats *int, now int64) {
+func processTimers(buffer *bytes.Buffer, now int64) int64 {
+	var num int64
 	for u, t := range timers {
 		if len(t) > 0 {
-			*numStats++
+			num++
+
 			sort.Sort(t)
 			min := t[0]
 			max := t[len(t)-1]
@@ -215,82 +222,75 @@ func processTimers(buffer *bytes.Buffer, numStats *int, now int64) {
 			fmt.Fprintf(buffer, "%s.count %d %d\n", u, count, now)
 		}
 	}
+	return num
 }
 
-func parseMessage(buf *bytes.Buffer) []*Packet {
-	var packetRegexp = regexp.MustCompile("^([^:]+):(-?[0-9]+)\\|(g|c|ms)(\\|@([0-9\\.]+))?\n?$")
+var packetRegexp = regexp.MustCompile("^([^:]+):(-?[0-9]+)\\|(g|c|ms)(\\|@([0-9\\.]+))?\n?$")
 
+func parseMessage(data []byte) []*Packet {
 	var output []*Packet
-	var err error
-	var line string
-	for {
-		if err != nil {
-			break
+	for _, line := range bytes.Split(data, []byte("\n")) {
+		if len(line) == 0 {
+			continue
 		}
-		line, err = buf.ReadString('\n')
-		if line != "" {
-			item := packetRegexp.FindStringSubmatch(line)
-			if len(item) == 0 {
+
+		item := packetRegexp.FindSubmatch(line)
+		if len(item) == 0 {
+			continue
+		}
+
+		var err error
+		var value interface{}
+		modifier := string(item[3])
+		switch modifier {
+		case "c":
+			value, err = strconv.ParseInt(string(item[2]), 10, 64)
+			if err != nil {
+				log.Printf("ERROR: failed to ParseInt %s - %s", item[2], err)
 				continue
 			}
-
-			var value interface{}
-			modifier := item[3]
-			switch modifier {
-			case "c":
-				value, err = strconv.ParseInt(item[2], 10, 64)
-				if err != nil {
-					log.Printf("ERROR: failed to ParseInt %s - %s", item[2], err.Error())
-				}
-			default:
-				value, err = strconv.ParseUint(item[2], 10, 64)
-				if err != nil {
-					log.Printf("ERROR: failed to ParseUint %s - %s", item[2], err.Error())
-				}
-			}
+		default:
+			value, err = strconv.ParseUint(string(item[2]), 10, 64)
 			if err != nil {
-				if modifier == "ms" {
-					value = 0
-				} else {
-					value = 1
-				}
+				log.Printf("ERROR: failed to ParseUint %s - %s", item[2], err)
+				continue
 			}
-
-			sampleRate, err := strconv.ParseFloat(item[5], 32)
-			if err != nil {
-				sampleRate = 1
-			}
-
-			packet := &Packet{
-				Bucket:   item[1],
-				Value:    value,
-				Modifier: modifier,
-				Sampling: float32(sampleRate),
-			}
-			output = append(output, packet)
 		}
+
+		sampleRate, err := strconv.ParseFloat(string(item[5]), 32)
+		if err != nil {
+			sampleRate = 1
+		}
+
+		packet := &Packet{
+			Bucket:   string(item[1]),
+			Value:    value,
+			Modifier: modifier,
+			Sampling: float32(sampleRate),
+		}
+		output = append(output, packet)
 	}
 	return output
 }
 
 func udpListener() {
 	address, _ := net.ResolveUDPAddr("udp", *serviceAddress)
-	log.Printf("Listening on %s", address)
+	log.Printf("listening on %s", address)
 	listener, err := net.ListenUDP("udp", address)
 	if err != nil {
-		log.Fatalf("ListenAndServe: %s", err.Error())
+		log.Fatalf("ERROR: ListenUDP - %s", err)
 	}
 	defer listener.Close()
-	message := make([]byte, 512)
+
+	message := make([]byte, 0, 512)
 	for {
-		n, remaddr, err := listener.ReadFrom(message)
+		_, remaddr, err := listener.ReadFromUDP(message)
 		if err != nil {
-			log.Printf("error reading from %v %s", remaddr, err.Error())
+			log.Printf("ERROR: reading UDP packet from %+v - %s", remaddr, err)
 			continue
 		}
-		buf := bytes.NewBuffer(message[0:n])
-		packets := parseMessage(buf)
-		for _, p := range packets {
+
+		for _, p := range parseMessage(message) {
 			In <- p
 		}
 	}
@@ -298,10 +298,12 @@ func udpListener() {
 
 func main() {
 	flag.Parse()
+
 	if *showVersion {
-		fmt.Printf("statsdaemon v%s\n", VERSION)
+		fmt.Printf("statsdaemon v%s (built w/%s)\n", VERSION, runtime.Version())
 		return
 	}
+
 	signalchan = make(chan os.Signal, 1)
 	signal.Notify(signalchan, syscall.SIGTERM)
 	*persistCountKeys = -1 * (*persistCountKeys)
