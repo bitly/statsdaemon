@@ -136,6 +136,9 @@ func submit() {
 
 	if *debug {
 		for _, line := range bytes.Split(buffer.Bytes(), []byte("\n")) {
+			if len(line) == 0 {
+				continue
+			}
 			log.Printf("DEBUG: %s", line)
 		}
 	}
@@ -282,7 +285,7 @@ func udpListener() {
 	}
 	defer listener.Close()
 
-	message := make([]byte, 0, 512)
+	message := make([]byte, 512)
 	for {
 		_, remaddr, err := listener.ReadFromUDP(message)
 		if err != nil {
