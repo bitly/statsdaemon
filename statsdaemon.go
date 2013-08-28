@@ -287,13 +287,13 @@ func udpListener() {
 
 	message := make([]byte, 512)
 	for {
-		_, remaddr, err := listener.ReadFromUDP(message)
+		n, remaddr, err := listener.ReadFromUDP(message)
 		if err != nil {
 			log.Printf("ERROR: reading UDP packet from %+v - %s", remaddr, err)
 			continue
 		}
 
-		for _, p := range parseMessage(message) {
+		for _, p := range parseMessage(message[:n]) {
 			In <- p
 		}
 	}
