@@ -4,8 +4,11 @@ statsdaemon
 Port of Etsy's statsd (https://github.com/etsy/statsd), written in Go (originally based 
 on [amir/gographite](https://github.com/amir/gographite)).
 
-* supports Timing, Counters, Gauges, Sampling
-* supports percentage values
+Supports
+
+* Timing (with optional percentiles)
+* Counters (with optional sampling)
+* Gauges
 
 [![Build Status](https://secure.travis-ci.org/bitly/statsdaemon.png)](http://travis-ci.org/bitly/statsdaemon)
 
