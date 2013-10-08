@@ -163,6 +163,8 @@ func processCounters(buffer *bytes.Buffer, now int64) int64 {
 	for s, c := range counters {
 		switch {
 		case c <= *persistCountKeys:
+			// consider this purgable
+			delete(counters, s)
 			continue
 		case c < 0:
 			counters[s] -= 1
