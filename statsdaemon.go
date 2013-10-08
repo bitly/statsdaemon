@@ -71,7 +71,7 @@ var (
 )
 
 func init() {
-	flag.Var(&percentThreshold, "percent-threshold", "Threshold percent (may be given multiple times)")
+	flag.Var(&percentThreshold, "percent-threshold", "Threshold percent (0-100, may be given multiple times)")
 }
 
 var (
