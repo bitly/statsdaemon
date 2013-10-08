@@ -20,7 +20,7 @@ import (
 
 const (
 	VERSION                 = "0.5.2-alpha"
-	MAX_UNPROCESSES_PACKETS = 1000
+	MAX_UNPROCESSED_PACKETS = 1000
 	MAX_UDP_PACKET_SIZE     = 512
 )
 
@@ -75,7 +75,7 @@ func init() {
 }
 
 var (
-	In       = make(chan *Packet, MAX_UNPROCESSES_PACKETS)
+	In       = make(chan *Packet, MAX_UNPROCESSED_PACKETS)
 	counters = make(map[string]int64)
 	gauges   = make(map[string]uint64)
 	timers   = make(map[string]Uint64Slice)
