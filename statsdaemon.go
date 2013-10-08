@@ -18,7 +18,11 @@ import (
 	"time"
 )
 
-const VERSION = "0.5.2-alpha"
+const (
+	VERSION                 = "0.5.2-alpha"
+	MAX_UNPROCESSES_PACKETS = 1000
+	MAX_UDP_PACKET_SIZE     = 512
+)
 
 var signalchan chan os.Signal
 
@@ -71,7 +75,7 @@ func init() {
 }
 
 var (
-	In       = make(chan *Packet, 1000)
+	In       = make(chan *Packet, MAX_UNPROCESSES_PACKETS)
 	counters = make(map[string]int64)
 	gauges   = make(map[string]uint64)
 	timers   = make(map[string]Uint64Slice)
@@ -285,7 +289,7 @@ func udpListener() {
 	}
 	defer listener.Close()
 
-	message := make([]byte, 512)
+	message := make([]byte, MAX_UDP_PACKET_SIZE)
 	for {
 		n, remaddr, err := listener.ReadFromUDP(message)
 		if err != nil {
