@@ -210,14 +210,31 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 			for _, pct := range pctls {
 
 				if len(t) > 1 {
+					var abs float64
+					if pct.float >= 0 {
+						abs = pct.float
+					} else {
+						abs = 100 + pct.float
+					}
 					// poor man's math.Round(x):
 					// math.Floor(x + 0.5)
-					indexOfPerc := int(math.Floor(((pct.float / 100.0) * float64(count)) + 0.5))
-					indexOfPerc -= 1  // index offset=0
+					indexOfPerc := int(math.Floor(((abs / 100.0) * float64(count)) + 0.5))
+					if pct.float >= 0 {
+						indexOfPerc -= 1  // index offset=0
+					}
 					maxAtThreshold = t[indexOfPerc]
 				}
 
-				fmt.Fprintf(buffer, "%s.upper_%s %d %d\n", u, pct.str, maxAtThreshold, now)
+				var tmpl string
+				var pctstr string
+				if pct.float >= 0 {
+					tmpl = "%s.upper_%s %d %d\n"
+					pctstr = pct.str
+				} else {
+					tmpl = "%s.lower_%s %d %d\n"
+					pctstr = pct.str[1:]
+				}
+				fmt.Fprintf(buffer, tmpl, u, pctstr, maxAtThreshold, now)
 			}
 
 			var z Uint64Slice
