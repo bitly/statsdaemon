@@ -98,11 +98,36 @@ func TestMean(t *testing.T) {
 
 	var buff bytes.Buffer
 	var num int64
-	num += processTimers(&buff, time.Now().Unix())
+	num += processTimers(&buff, time.Now().Unix(), Percentiles{})
 	assert.Equal(t, num, int64(1))
 	dataForGraphite := buff.String()
 	meanRegexp := regexp.MustCompile("response_time.mean.*20")
 
+	matched := meanRegexp.MatchString(dataForGraphite)
+	assert.Equal(t, matched, true)
+}
+
+func TestUpperPercentile(t *testing.T) {
+	// Some data with expected mean of 20
+	d := []byte("time:0|ms\ntime:1|ms\ntime:2|ms\ntime:3|ms")
+	packets := parseMessage(d)
+
+	for _, s := range packets {
+		timers[s.Bucket] = append(timers[s.Bucket], s.Value.(uint64))
+	}
+
+	var buff bytes.Buffer
+	var num int64
+	num += processTimers(&buff, time.Now().Unix(), Percentiles{
+		&Percentile{
+			75,
+			"75",
+		},
+	})
+	assert.Equal(t, num, int64(1))
+	dataForGraphite := buff.String()
+
+	meanRegexp := regexp.MustCompile(`time\.upper_75 2 `)
 	matched := meanRegexp.MatchString(dataForGraphite)
 	assert.Equal(t, matched, true)
 }
