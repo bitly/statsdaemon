@@ -101,7 +101,8 @@ func TestMean(t *testing.T) {
 	num += processTimers(&buff, time.Now().Unix())
 	assert.Equal(t, num, int64(1))
 	dataForGraphite := buff.String()
-	meanRegexp := regexp.MustCompile("response_time.mean.*20")
+	pattern := `response_time\.mean 20\.[0-9]+ `
+	meanRegexp := regexp.MustCompile(pattern)
 
 	matched := meanRegexp.MatchString(dataForGraphite)
 	assert.Equal(t, matched, true)
