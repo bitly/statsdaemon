@@ -17,6 +17,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"sync"
 )
 
 const (
@@ -129,7 +130,6 @@ func monitor() {
 
 func submit(deadline time.Time) error {
 	var buffer bytes.Buffer
-	var num int64
 
 	now := time.Now().Unix()
 
@@ -152,9 +152,28 @@ func submit(deadline time.Time) error {
 		return errors.New(errmsg)
 	}
 
-	num += processCounters(&buffer, now)
-	num += processGauges(&buffer, now)
-	num += processTimers(&buffer, now, percentThreshold)
+	var numchan chan int64
+	var wg sync.WaitGroup
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		numchan <- processCounters(&buffer, now)
+	}()
+	go func() {
+		defer wg.Done()
+		numchan <- processGauges(&buffer, now)
+	}()
+	go func() {
+		defer wg.Done()
+		numchan <- processTimers(&buffer, now, percentThreshold)
+	}()
+	wg.Done()
+	close(numchan)
+
+	var num int64
+	for n := range(numchan) {
+		num += n
+	}
 	if num == 0 {
 		return nil
 	}
