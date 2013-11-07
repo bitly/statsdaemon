@@ -125,7 +125,7 @@ func submit() {
 			log.Printf("WARNING: resetting counters when in debug mode")
 			processCounters(&buffer, now)
 			processGauges(&buffer, now)
-			processTimers(&buffer, now)
+			processTimers(&buffer, now, percentThreshold)
 		}
 		return
 	}
@@ -133,7 +133,7 @@ func submit() {
 
 	num += processCounters(&buffer, now)
 	num += processGauges(&buffer, now)
-	num += processTimers(&buffer, now)
+	num += processTimers(&buffer, now, percentThreshold)
 	if num == 0 {
 		return
 	}
@@ -191,7 +191,7 @@ func processGauges(buffer *bytes.Buffer, now int64) int64 {
 	return num
 }
 
-func processTimers(buffer *bytes.Buffer, now int64) int64 {
+func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 	var num int64
 	for u, t := range timers {
 		if len(t) > 0 {
@@ -209,17 +209,34 @@ func processTimers(buffer *bytes.Buffer, now int64) int64 {
 			}
 			mean := float64(sum) / float64(len(t))
 
-			for _, pct := range percentThreshold {
+			for _, pct := range pctls {
 
 				if len(t) > 1 {
-					indexOfPerc := int(math.Ceil(((pct.float / 100.0) * float64(count)) + 0.5))
-					if indexOfPerc >= count {
-						indexOfPerc = count - 1
+					var abs float64
+					if pct.float >= 0 {
+						abs = pct.float
+					} else {
+						abs = 100 + pct.float
+					}
+					// poor man's math.Round(x):
+					// math.Floor(x + 0.5)
+					indexOfPerc := int(math.Floor(((abs / 100.0) * float64(count)) + 0.5))
+					if pct.float >= 0 {
+						indexOfPerc -= 1  // index offset=0
 					}
 					maxAtThreshold = t[indexOfPerc]
 				}
 
-				fmt.Fprintf(buffer, "%s.upper_%s %d %d\n", u, pct.str, maxAtThreshold, now)
+				var tmpl string
+				var pctstr string
+				if pct.float >= 0 {
+					tmpl = "%s.upper_%s %d %d\n"
+					pctstr = pct.str
+				} else {
+					tmpl = "%s.lower_%s %d %d\n"
+					pctstr = pct.str[1:]
+				}
+				fmt.Fprintf(buffer, tmpl, u, pctstr, maxAtThreshold, now)
 			}
 
 			var z Uint64Slice
