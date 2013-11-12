@@ -15,9 +15,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
-	"sync"
 )
 
 const (
@@ -171,7 +171,7 @@ func submit(deadline time.Time) error {
 	close(numchan)
 
 	var num int64
-	for n := range(numchan) {
+	for n := range numchan {
 		num += n
 	}
 	if num == 0 {
@@ -261,7 +261,7 @@ func processTimer(buffer *bytes.Buffer, now int64, pctls Percentiles, u string, 
 			// math.Floor(x + 0.5)
 			indexOfPerc := int(math.Floor(((abs / 100.0) * float64(count)) + 0.5))
 			if pct.float >= 0 {
-				indexOfPerc -= 1  // index offset=0
+				indexOfPerc -= 1 // index offset=0
 			}
 			maxAtThreshold = t[indexOfPerc]
 		}
