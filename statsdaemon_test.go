@@ -3,10 +3,19 @@ package main
 import (
 	"bytes"
 	"github.com/bmizerany/assert"
+	"math/rand"
 	"regexp"
+	"strconv"
 	"testing"
 	"time"
 )
+
+var commonPercentiles = Percentiles{
+	&Percentile{
+		99,
+		"99",
+	},
+}
 
 func TestPacketParse(t *testing.T) {
 	d := []byte("gaugor:333|g")
@@ -160,4 +169,66 @@ func TestLowerPercentile(t *testing.T) {
 	meanRegexp = regexp.MustCompile(`time\.lower_75 1 `)
 	matched = meanRegexp.MatchString(dataForGraphite)
 	assert.Equal(t, matched, true)
+}
+
+func BenchmarkManyDifferentSensors(t *testing.B) {
+	r := rand.New(rand.NewSource(438))
+	for i:=0 ; i<1000 ; i++ {
+		bucket := "response_time" + strconv.Itoa(i)
+		for i:=0 ; i<10000 ; i++ {
+			a := uint64(r.Uint32() % 1000)
+			timers[bucket] = append(timers[bucket], a)
+		}
+	}
+
+	for i:=0 ; i<1000 ; i++ {
+		bucket := "count" + strconv.Itoa(i)
+		for i:=0 ; i<10000 ; i++ {
+			a := int64(r.Uint32() % 1000)
+			counters[bucket] = a
+		}
+	}
+
+	for i:=0 ; i<1000 ; i++ {
+		bucket := "gauge" + strconv.Itoa(i)
+		for i:=0 ; i<10000 ; i++ {
+			a := uint64(r.Uint32() % 1000)
+			gauges[bucket] = a
+		}
+	}
+
+	var buff bytes.Buffer
+	now := time.Now().Unix()
+	t.ResetTimer()
+	processTimers(&buff, now, commonPercentiles)
+	processCounters(&buff, now)
+	processGauges(&buff, now)
+}
+
+func BenchmarkOneBigTimer(t *testing.B) {
+	r := rand.New(rand.NewSource(438))
+	bucket := "response_time"
+	for i:=0 ; i<10000000 ; i++ {
+		a := uint64(r.Uint32() % 1000)
+		timers[bucket] = append(timers[bucket], a)
+	}
+
+	var buff bytes.Buffer
+	t.ResetTimer()
+	processTimers(&buff, time.Now().Unix(), commonPercentiles)
+}
+
+func BenchmarkLotsOfTimers(t *testing.B) {
+	r := rand.New(rand.NewSource(438))
+	for i:=0 ; i<1000 ; i++ {
+		bucket := "response_time" + strconv.Itoa(i)
+		for i:=0 ; i<10000 ; i++ {
+			a := uint64(r.Uint32() % 1000)
+			timers[bucket] = append(timers[bucket], a)
+		}
+	}
+
+	var buff bytes.Buffer
+	t.ResetTimer()
+	processTimers(&buff, time.Now().Unix(), commonPercentiles)
 }
