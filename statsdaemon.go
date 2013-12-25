@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -87,10 +88,14 @@ func monitor() {
 		select {
 		case sig := <-signalchan:
 			fmt.Printf("!! Caught signal %d... shutting down\n", sig)
-			submit()
+			if err := submit(); err != nil {
+				log.Printf("ERROR: %s", err)
+			}
 			return
 		case <-ticker.C:
-			submit()
+			if err := submit(); err != nil {
+				log.Printf("ERROR: %s", err)
+			}
 		case s := <-In:
 			if s.Modifier == "ms" {
 				_, ok := timers[s.Bucket]
@@ -112,7 +117,7 @@ func monitor() {
 	}
 }
 
-func submit() {
+func submit() error {
 	var buffer bytes.Buffer
 	var num int64
 
@@ -120,14 +125,14 @@ func submit() {
 
 	client, err := net.Dial("tcp", *graphiteAddress)
 	if err != nil {
-		log.Printf("ERROR: dialing %s - %s", *graphiteAddress, err)
 		if *debug {
 			log.Printf("WARNING: resetting counters when in debug mode")
 			processCounters(&buffer, now)
 			processGauges(&buffer, now)
 			processTimers(&buffer, now, percentThreshold)
 		}
-		return
+		errmsg := fmt.Sprintf("dialing %s failed - %s", *graphiteAddress, err)
+		return errors.New(errmsg)
 	}
 	defer client.Close()
 
@@ -135,7 +140,7 @@ func submit() {
 	num += processGauges(&buffer, now)
 	num += processTimers(&buffer, now, percentThreshold)
 	if num == 0 {
-		return
+		return nil
 	}
 
 	if *debug {
@@ -149,11 +154,13 @@ func submit() {
 
 	_, err = client.Write(buffer.Bytes())
 	if err != nil {
-		log.Printf("ERROR: failed to write stats - %s", err)
-		return
+		errmsg := fmt.Sprintf("failed to write stats - %s", err)
+		return errors.New(errmsg)
 	}
 
 	log.Printf("sent %d stats to %s", num, *graphiteAddress)
+
+	return nil
 }
 
 func processCounters(buffer *bytes.Buffer, now int64) int64 {
