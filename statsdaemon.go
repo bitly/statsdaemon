@@ -83,17 +83,18 @@ var (
 )
 
 func monitor() {
-	ticker := time.NewTicker(time.Duration(*flushInterval) * time.Second)
+	period := time.Duration(*flushInterval) * time.Second
+	ticker := time.NewTicker(period)
 	for {
 		select {
 		case sig := <-signalchan:
 			fmt.Printf("!! Caught signal %d... shutting down\n", sig)
-			if err := submit(); err != nil {
+			if err := submit(time.Now().Add(period)); err != nil {
 				log.Printf("ERROR: %s", err)
 			}
 			return
 		case <-ticker.C:
-			if err := submit(); err != nil {
+			if err := submit(time.Now().Add(period)); err != nil {
 				log.Printf("ERROR: %s", err)
 			}
 		case s := <-In:
@@ -117,7 +118,7 @@ func monitor() {
 	}
 }
 
-func submit() error {
+func submit(deadline time.Time) error {
 	var buffer bytes.Buffer
 	var num int64
 
@@ -135,6 +136,12 @@ func submit() error {
 		return errors.New(errmsg)
 	}
 	defer client.Close()
+
+	err = client.SetDeadline(deadline)
+	if err != nil {
+		errmsg := fmt.Sprintf("could not set deadline:", err)
+		return errors.New(errmsg)
+	}
 
 	num += processCounters(&buffer, now)
 	num += processGauges(&buffer, now)
