@@ -172,8 +172,10 @@ func submit(deadline time.Time) error {
 
 func processCounters(buffer *bytes.Buffer, now int64) int64 {
 	var num int64
-	// continue sending zeros for counters for a short period of time
-	// even if we have no new data. for more context see https://github.com/bitly/statsdaemon/pull/8
+	// continue sending zeros for counters for a short period of time even if we have no new data
+	// note we use the same in-memory value to denote both the actual value of the counter (value >= 0)
+	// as well as how many turns to keep the counter for (value < 0)
+	// for more context see https://github.com/bitly/statsdaemon/pull/8
 	for s, c := range counters {
 		switch {
 		case c <= *persistCountKeys:
