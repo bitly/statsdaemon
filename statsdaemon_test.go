@@ -173,25 +173,25 @@ func TestLowerPercentile(t *testing.T) {
 
 func BenchmarkManyDifferentSensors(t *testing.B) {
 	r := rand.New(rand.NewSource(438))
-	for i:=0 ; i<1000 ; i++ {
+	for i := 0; i < 1000; i++ {
 		bucket := "response_time" + strconv.Itoa(i)
-		for i:=0 ; i<10000 ; i++ {
+		for i := 0; i < 10000; i++ {
 			a := uint64(r.Uint32() % 1000)
 			timers[bucket] = append(timers[bucket], a)
 		}
 	}
 
-	for i:=0 ; i<1000 ; i++ {
+	for i := 0; i < 1000; i++ {
 		bucket := "count" + strconv.Itoa(i)
-		for i:=0 ; i<10000 ; i++ {
+		for i := 0; i < 10000; i++ {
 			a := int64(r.Uint32() % 1000)
 			counters[bucket] = a
 		}
 	}
 
-	for i:=0 ; i<1000 ; i++ {
+	for i := 0; i < 1000; i++ {
 		bucket := "gauge" + strconv.Itoa(i)
-		for i:=0 ; i<10000 ; i++ {
+		for i := 0; i < 10000; i++ {
 			a := uint64(r.Uint32() % 1000)
 			gauges[bucket] = a
 		}
@@ -208,7 +208,7 @@ func BenchmarkManyDifferentSensors(t *testing.B) {
 func BenchmarkOneBigTimer(t *testing.B) {
 	r := rand.New(rand.NewSource(438))
 	bucket := "response_time"
-	for i:=0 ; i<10000000 ; i++ {
+	for i := 0; i < 10000000; i++ {
 		a := uint64(r.Uint32() % 1000)
 		timers[bucket] = append(timers[bucket], a)
 	}
@@ -220,9 +220,9 @@ func BenchmarkOneBigTimer(t *testing.B) {
 
 func BenchmarkLotsOfTimers(t *testing.B) {
 	r := rand.New(rand.NewSource(438))
-	for i:=0 ; i<1000 ; i++ {
+	for i := 0; i < 1000; i++ {
 		bucket := "response_time" + strconv.Itoa(i)
-		for i:=0 ; i<10000 ; i++ {
+		for i := 0; i < 10000; i++ {
 			a := uint64(r.Uint32() % 1000)
 			timers[bucket] = append(timers[bucket], a)
 		}
