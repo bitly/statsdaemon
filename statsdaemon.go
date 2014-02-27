@@ -68,6 +68,7 @@ var (
 	debug            = flag.Bool("debug", false, "print statistics sent to graphite")
 	showVersion      = flag.Bool("version", false, "print version string")
 	persistCountKeys = flag.Int64("persist-count-keys", 60, "number of flush-interval's to persist count keys")
+	receiveCounter  = flag.String("receive-counter", "", "Metric name for total metrics recevied per interval")
 	percentThreshold = Percentiles{}
 )
 
@@ -98,6 +99,14 @@ func monitor() {
 				log.Printf("ERROR: %s", err)
 			}
 		case s := <-In:
+			if (*receiveCounter != "") {
+				v, ok := counters[*receiveCounter]
+				if !ok || v < 0 {
+					counters[*receiveCounter] = 0
+				}
+				counters[*receiveCounter] += 1
+			}
+
 			if s.Modifier == "ms" {
 				_, ok := timers[s.Bucket]
 				if !ok {
