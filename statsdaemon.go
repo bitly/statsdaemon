@@ -276,7 +276,7 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 	return num
 }
 
-var packetRegexp = regexp.MustCompile(`^([^:]+):(-?\d+.?\d*)\|(g|c|ms)(\|@([0-9\.]+))?\n?$`)
+var packetRegexp = regexp.MustCompile("^([^:]+):(-?[0-9\\.]+)\\|(g|c|ms)(\\|@([0-9\\.]+))?\n?$")
 
 func parseMessage(data []byte) []*Packet {
 	var output []*Packet
