@@ -45,6 +45,19 @@ func TestPacketParse(t *testing.T) {
 	assert.Equal(t, "c", packet.Modifier)
 	assert.Equal(t, float32(1), packet.Sampling)
 
+	d = []byte("float:4.9|c")
+	packets = parseMessage(d)
+	assert.Equal(t, len(packets), 1)
+	packet = packets[0]
+	assert.Equal(t, "float", packet.Bucket)
+	assert.Equal(t, int64(4), packet.Value.(int64))
+	assert.Equal(t, "c", packet.Modifier)
+	assert.Equal(t, float32(1), packet.Sampling)
+
+	d = []byte("invalidinteger:4x9|c")
+	packets = parseMessage(d)
+	assert.Equal(t, len(packets), 0)
+
 	d = []byte("gorets:-4|c")
 	packets = parseMessage(d)
 	assert.Equal(t, len(packets), 1)

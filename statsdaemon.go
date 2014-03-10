@@ -68,7 +68,7 @@ var (
 	debug            = flag.Bool("debug", false, "print statistics sent to graphite")
 	showVersion      = flag.Bool("version", false, "print version string")
 	persistCountKeys = flag.Int64("persist-count-keys", 60, "number of flush-interval's to persist count keys")
-	receiveCounter  = flag.String("receive-counter", "", "Metric name for total metrics recevied per interval")
+	receiveCounter   = flag.String("receive-counter", "", "Metric name for total metrics recevied per interval")
 	percentThreshold = Percentiles{}
 )
 
@@ -99,7 +99,7 @@ func monitor() {
 				log.Printf("ERROR: %s", err)
 			}
 		case s := <-In:
-			if (*receiveCounter != "") {
+			if *receiveCounter != "" {
 				v, ok := counters[*receiveCounter]
 				if !ok || v < 0 {
 					counters[*receiveCounter] = 0
@@ -276,7 +276,7 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 	return num
 }
 
-var packetRegexp = regexp.MustCompile("^([^:]+):(-?[0-9]+)\\|(g|c|ms)(\\|@([0-9\\.]+))?\n?$")
+var packetRegexp = regexp.MustCompile("^([^:]+):(-?[0-9\\.]+)\\|(g|c|ms)(\\|@([0-9\\.]+))?\n?$")
 
 func parseMessage(data []byte) []*Packet {
 	var output []*Packet
@@ -295,17 +295,22 @@ func parseMessage(data []byte) []*Packet {
 		modifier := string(item[3])
 		switch modifier {
 		case "c":
-			value, err = strconv.ParseInt(string(item[2]), 10, 64)
+			f, err := strconv.ParseFloat(string(item[2]), 64)
 			if err != nil {
-				log.Printf("ERROR: failed to ParseInt %s - %s", item[2], err)
+				log.Printf("ERROR: failed to ParseFloat %s - %s", item[2], err)
 				continue
 			}
+
+			// only allow integers
+			value = int64(f)
 		default:
-			value, err = strconv.ParseUint(string(item[2]), 10, 64)
+			f, err := strconv.ParseFloat(string(item[2]), 64)
 			if err != nil {
-				log.Printf("ERROR: failed to ParseUint %s - %s", item[2], err)
+				log.Printf("ERROR: failed to ParseFloat %s - %s", item[2], err)
 				continue
 			}
+
+			value = uint64(f)
 		}
 
 		sampleRate, err := strconv.ParseFloat(string(item[5]), 32)
