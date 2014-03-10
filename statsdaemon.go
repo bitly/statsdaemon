@@ -297,7 +297,7 @@ func parseMessage(data []byte) []*Packet {
 		case "c":
 			f, err := strconv.ParseFloat(string(item[2]), 64)
 			if err != nil {
-				log.Printf("ERROR: failed to ParseInt %s - %s", item[2], err)
+				log.Printf("ERROR: failed to ParseFloat %s - %s", item[2], err)
 				continue
 			}
 
@@ -306,7 +306,7 @@ func parseMessage(data []byte) []*Packet {
 		default:
 			f, err := strconv.ParseFloat(string(item[2]), 64)
 			if err != nil {
-				log.Printf("ERROR: failed to ParseUint %s - %s", item[2], err)
+				log.Printf("ERROR: failed to ParseFloat %s - %s", item[2], err)
 				continue
 			}
 
