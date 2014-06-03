@@ -33,3 +33,13 @@ Usage of ./statsdaemon:
   -receive-counter="": Metric name for total metrics recevied per interval
   -version=false: print version string
 ```
+
+Building a Debian package
+=========================
+In your terminal, execute:
+
+    ./build-deb.sh <version> <386|amd64>
+
+where ``<version>`` is something like `0.5.0-5`. To compile this on mac you
+need to install ``dpkg`` using either Homebrew or Ports. You also need support
+for cross compiling Go applications.
