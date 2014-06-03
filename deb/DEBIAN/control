@@ -1,0 +1,7 @@
+Package: statsdaemon
+Version: VERSION
+Section: base
+Priority: optional
+Architecture: ARCH
+Maintainer: Jens Rantil <jens.rantil@tink.se>
+Description: A binary statsd server implemented in Go.
