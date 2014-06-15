@@ -1,5 +1,6 @@
 #!/bin/bash
 # Inspired by http://ubuntuforums.org/showthread.php?t=910717.
+set -o errexit
 
 if [ "$#" -ne 2 ]; then
   echo "$0 <version> <386|amd64>"
@@ -11,8 +12,6 @@ fi
 VERSION=$1
 BASEDIR=statsdaemon_$VERSION
 ARCH=$2
-
-set -o errexit
 
 GOOS=linux GOARCH=$ARCH go build statsdaemon.go
 
