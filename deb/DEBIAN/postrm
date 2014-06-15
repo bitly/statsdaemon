@@ -1,4 +1,4 @@
 #!/bin/bash
 set -o errexit
 
-deluser statsdaemon || echo ""
+deluser statsdaemon || true

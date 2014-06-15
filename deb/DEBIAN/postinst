@@ -13,4 +13,4 @@ if [ "$1" = configure ]; then
             --group "$USER"
 fi
 
-service statsdaemon start || echo ""
+service statsdaemon start || true
