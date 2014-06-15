@@ -12,8 +12,7 @@ VERSION=$1
 BASEDIR=statsdaemon_$VERSION
 ARCH=$2
 
-# Fail early
-set -e errexit
+set -o errexit
 
 GOOS=linux GOARCH=$ARCH go build statsdaemon.go
 
