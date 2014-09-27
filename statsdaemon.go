@@ -219,59 +219,60 @@ func processGauges(buffer *bytes.Buffer, now int64) int64 {
 func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 	var num int64
 	for u, t := range timers {
-		if len(t) > 0 {
-			num++
-
-			sort.Sort(t)
-			min := t[0]
-			max := t[len(t)-1]
-			maxAtThreshold := max
-			count := len(t)
-
-			sum := uint64(0)
-			for _, value := range t {
-				sum += value
-			}
-			mean := float64(sum) / float64(len(t))
-
-			for _, pct := range pctls {
-
-				if len(t) > 1 {
-					var abs float64
-					if pct.float >= 0 {
-						abs = pct.float
-					} else {
-						abs = 100 + pct.float
-					}
-					// poor man's math.Round(x):
-					// math.Floor(x + 0.5)
-					indexOfPerc := int(math.Floor(((abs / 100.0) * float64(count)) + 0.5))
-					if pct.float >= 0 {
-						indexOfPerc -= 1 // index offset=0
-					}
-					maxAtThreshold = t[indexOfPerc]
-				}
-
-				var tmpl string
-				var pctstr string
-				if pct.float >= 0 {
-					tmpl = "%s.upper_%s %d %d\n"
-					pctstr = pct.str
-				} else {
-					tmpl = "%s.lower_%s %d %d\n"
-					pctstr = pct.str[1:]
-				}
-				fmt.Fprintf(buffer, tmpl, u, pctstr, maxAtThreshold, now)
-			}
-
-			var z Uint64Slice
-			timers[u] = z
-
-			fmt.Fprintf(buffer, "%s.mean %f %d\n", u, mean, now)
-			fmt.Fprintf(buffer, "%s.upper %d %d\n", u, max, now)
-			fmt.Fprintf(buffer, "%s.lower %d %d\n", u, min, now)
-			fmt.Fprintf(buffer, "%s.count %d %d\n", u, count, now)
+		if len(t) == 0 {
+			continue
 		}
+
+		num++
+
+		sort.Sort(t)
+		min := t[0]
+		max := t[len(t)-1]
+		maxAtThreshold := max
+		count := len(t)
+
+		sum := uint64(0)
+		for _, value := range t {
+			sum += value
+		}
+		mean := float64(sum) / float64(len(t))
+
+		for _, pct := range pctls {
+			if len(t) > 1 {
+				var abs float64
+				if pct.float >= 0 {
+					abs = pct.float
+				} else {
+					abs = 100 + pct.float
+				}
+				// poor man's math.Round(x):
+				// math.Floor(x + 0.5)
+				indexOfPerc := int(math.Floor(((abs / 100.0) * float64(count)) + 0.5))
+				if pct.float >= 0 {
+					indexOfPerc -= 1 // index offset=0
+				}
+				maxAtThreshold = t[indexOfPerc]
+			}
+
+			var tmpl string
+			var pctstr string
+			if pct.float >= 0 {
+				tmpl = "%s.upper_%s %d %d\n"
+				pctstr = pct.str
+			} else {
+				tmpl = "%s.lower_%s %d %d\n"
+				pctstr = pct.str[1:]
+			}
+			fmt.Fprintf(buffer, tmpl, u, pctstr, maxAtThreshold, now)
+		}
+
+		var z Uint64Slice
+		timers[u] = z
+
+		fmt.Fprintf(buffer, "%s.mean %f %d\n", u, mean, now)
+		fmt.Fprintf(buffer, "%s.upper %d %d\n", u, max, now)
+		fmt.Fprintf(buffer, "%s.lower %d %d\n", u, min, now)
+		fmt.Fprintf(buffer, "%s.count %d %d\n", u, count, now)
 	}
 	return num
 }
