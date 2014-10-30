@@ -68,8 +68,9 @@ var (
 	debug            = flag.Bool("debug", false, "print statistics sent to graphite")
 	showVersion      = flag.Bool("version", false, "print version string")
 	persistCountKeys = flag.Int64("persist-count-keys", 60, "number of flush-interval's to persist count keys")
-	receiveCounter  = flag.String("receive-counter", "", "Metric name for total metrics recevied per interval")
+	receiveCounter   = flag.String("receive-counter", "", "Metric name for total metrics recevied per interval")
 	percentThreshold = Percentiles{}
+	prefix           = flag.String("prefix", "", "Prefix for all stats")
 )
 
 func init() {
@@ -99,7 +100,7 @@ func monitor() {
 				log.Printf("ERROR: %s", err)
 			}
 		case s := <-In:
-			if (*receiveCounter != "") {
+			if *receiveCounter != "" {
 				v, ok := counters[*receiveCounter]
 				if !ok || v < 0 {
 					counters[*receiveCounter] = 0
@@ -315,7 +316,7 @@ func parseMessage(data []byte) []*Packet {
 		}
 
 		packet := &Packet{
-			Bucket:   string(item[1]),
+			Bucket:   *prefix + string(item[1]),
 			Value:    value,
 			Modifier: modifier,
 			Sampling: float32(sampleRate),
