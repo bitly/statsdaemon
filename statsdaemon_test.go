@@ -94,6 +94,26 @@ func TestPacketParse(t *testing.T) {
 	d = []byte("a.key.with-0.dash:4")
 	packets = parseMessage(d)
 	assert.Equal(t, len(packets), 0)
+
+	d = []byte("gorets:5m")
+	packets = parseMessage(d)
+	assert.Equal(t, len(packets), 0)
+
+	d = []byte("gorets")
+	packets = parseMessage(d)
+	assert.Equal(t, len(packets), 0)
+
+	d = []byte("gorets:")
+	packets = parseMessage(d)
+	assert.Equal(t, len(packets), 0)
+
+	d = []byte("gorets:5|mg")
+	packets = parseMessage(d)
+	assert.Equal(t, len(packets), 0)
+
+	d = []byte("gorets:5|ms|@")
+	packets = parseMessage(d)
+	assert.Equal(t, len(packets), 1)
 }
 
 func TestMean(t *testing.T) {
