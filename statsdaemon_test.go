@@ -232,3 +232,10 @@ func BenchmarkLotsOfTimers(t *testing.B) {
 	t.ResetTimer()
 	processTimers(&buff, time.Now().Unix(), commonPercentiles)
 }
+
+func BenchmarkParseMessage(b *testing.B) {
+	d := []byte("a.key.with-0.dash:4|c|@0.5")
+	for i := 0; i < b.N; i++ {
+		parseMessage(d)
+	}
+}
