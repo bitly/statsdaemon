@@ -10,7 +10,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -278,48 +277,94 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 	return num
 }
 
-var packetRegexp = regexp.MustCompile("^([^:]+):(-?[0-9]+)\\|(g|c|ms)(\\|@([0-9\\.]+))?\n?$")
-
 func parseMessage(data []byte) []*Packet {
-	var output []*Packet
+	var (
+		output []*Packet
+		input  []byte
+	)
+
 	for _, line := range bytes.Split(data, []byte("\n")) {
 		if len(line) == 0 {
 			continue
 		}
+		input = line
 
-		item := packetRegexp.FindSubmatch(line)
-		if len(item) == 0 {
+		index := bytes.IndexByte(input, ':')
+		if index < 0 {
+			if *debug {
+				log.Printf("ERROR: failed to parse line: %s\n", string(line))
+			}
 			continue
 		}
 
-		var err error
-		var value interface{}
-		modifier := string(item[3])
-		switch modifier {
-		case "c":
-			value, err = strconv.ParseInt(string(item[2]), 10, 64)
-			if err != nil {
-				log.Printf("ERROR: failed to ParseInt %s - %s", item[2], err)
+		name := input[:index]
+
+		index++
+		input = input[index:]
+
+		index = bytes.IndexByte(input, '|')
+		if index < 0 {
+			if *debug {
+				log.Printf("ERROR: failed to parse line: %s\n", string(line))
+			}
+			continue
+		}
+
+		val := input[:index]
+		index++
+
+		var mtypeStr string
+
+		if input[index] == 'm' {
+			index++
+			if index >= len(input) || input[index] != 's' {
+				if *debug {
+					log.Printf("ERROR: failed to parse line: %s\n", string(line))
+				}
 				continue
 			}
-		default:
-			value, err = strconv.ParseUint(string(item[2]), 10, 64)
+			mtypeStr = "ms"
+		} else {
+			mtypeStr = string(input[index])
+		}
+
+		index++
+		input = input[index:]
+
+		var (
+			value interface{}
+			err   error
+		)
+
+		if mtypeStr[0] == 'c' {
+			value, err = strconv.ParseInt(string(val), 10, 64)
 			if err != nil {
-				log.Printf("ERROR: failed to ParseUint %s - %s", item[2], err)
+				log.Printf("ERROR: failed to ParseInt %s - %s", string(val), err)
+				continue
+			}
+		} else {
+			value, err = strconv.ParseUint(string(val), 10, 64)
+			if err != nil {
+				log.Printf("ERROR: failed to ParseUint %s - %s", string(val), err)
 				continue
 			}
 		}
 
-		sampleRate, err := strconv.ParseFloat(string(item[5]), 32)
-		if err != nil {
-			sampleRate = 1
+		var sampleRate float32 = 1
+
+		if len(input) > 0 && bytes.HasPrefix(input, []byte("|@")) {
+			input = input[2:]
+			rate, err := strconv.ParseFloat(string(input), 32)
+			if err == nil {
+				sampleRate = float32(rate)
+			}
 		}
 
 		packet := &Packet{
-			Bucket:   *prefix + string(item[1]),
+			Bucket:   *prefix + string(name),
 			Value:    value,
-			Modifier: modifier,
-			Sampling: float32(sampleRate),
+			Modifier: mtypeStr,
+			Sampling: sampleRate,
 		}
 		output = append(output, packet)
 	}

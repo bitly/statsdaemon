@@ -94,6 +94,26 @@ func TestPacketParse(t *testing.T) {
 	d = []byte("a.key.with-0.dash:4")
 	packets = parseMessage(d)
 	assert.Equal(t, len(packets), 0)
+
+	d = []byte("gorets:5m")
+	packets = parseMessage(d)
+	assert.Equal(t, len(packets), 0)
+
+	d = []byte("gorets")
+	packets = parseMessage(d)
+	assert.Equal(t, len(packets), 0)
+
+	d = []byte("gorets:")
+	packets = parseMessage(d)
+	assert.Equal(t, len(packets), 0)
+
+	d = []byte("gorets:5|mg")
+	packets = parseMessage(d)
+	assert.Equal(t, len(packets), 0)
+
+	d = []byte("gorets:5|ms|@")
+	packets = parseMessage(d)
+	assert.Equal(t, len(packets), 1)
 }
 
 func TestMean(t *testing.T) {
@@ -231,4 +251,11 @@ func BenchmarkLotsOfTimers(t *testing.B) {
 	var buff bytes.Buffer
 	t.ResetTimer()
 	processTimers(&buff, time.Now().Unix(), commonPercentiles)
+}
+
+func BenchmarkParseMessage(b *testing.B) {
+	d := []byte("a.key.with-0.dash:4|c|@0.5")
+	for i := 0; i < b.N; i++ {
+		parseMessage(d)
+	}
 }
