@@ -133,6 +133,10 @@ func submit(deadline time.Time) error {
 
 	now := time.Now().Unix()
 
+	if *graphiteAddress == "-" {
+		return nil
+	}
+
 	client, err := net.Dial("tcp", *graphiteAddress)
 	if err != nil {
 		if *debug {
