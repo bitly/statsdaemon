@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	VERSION                 = "0.5.2-alpha"
+	VERSION                 = "0.6-alpha"
 	MAX_UNPROCESSED_PACKETS = 1000
 	MAX_UDP_PACKET_SIZE     = 512
 )
