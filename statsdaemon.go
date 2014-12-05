@@ -120,6 +120,7 @@ func packetHandler(s *Packet) {
 		counters[*receiveCounter] += 1
 	}
 
+
 	if s.Modifier == "ms" {
 		_, ok := timers[s.Bucket]
 		if !ok {
