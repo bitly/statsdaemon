@@ -33,6 +33,12 @@ type Packet struct {
 	Sampling float32
 }
 
+type GaugeData struct {
+        Relative    bool
+        Negative    bool
+        Value       uint64
+}
+
 type Uint64Slice []uint64
 
 func (s Uint64Slice) Len() int           { return len(s) }
@@ -342,6 +348,32 @@ func parseMessage(data []byte) []*Packet {
 				log.Printf("ERROR: failed to ParseInt %s - %s", string(val), err)
 				continue
 			}
+                } else if mtypeStr[0] == 'g' {
+
+                        var (
+                                gaugeValue uint64
+                                relative bool
+                                negative bool
+                                stringToParse string
+                        )
+
+                        if string(val[0]) == "+" || string(val[0]) == "-" {
+                                relative = true;
+                                negative = string(val[0]) == "-";
+                                stringToParse = string(val[1:])
+                        } else {
+                                relative = false
+                                negative = false
+                                stringToParse = string(val)
+                        }
+
+                        gaugeValue, err = strconv.ParseUint(stringToParse, 10, 64)
+			if err != nil {
+			        log.Printf("ERROR: failed to ParseUint %s - %s", string(val), err)
+			        continue
+			}
+
+                        value = GaugeData{relative, negative, gaugeValue}
 		} else {
 			value, err = strconv.ParseUint(string(val), 10, 64)
 			if err != nil {
