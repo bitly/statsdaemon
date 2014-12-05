@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"github.com/bmizerany/assert"
+	"math"
 	"math/rand"
 	"strconv"
 	"testing"
@@ -22,7 +23,35 @@ func TestPacketParse(t *testing.T) {
 	assert.Equal(t, len(packets), 1)
 	packet := packets[0]
 	assert.Equal(t, "gaugor", packet.Bucket)
-	assert.Equal(t, uint64(333), packet.Value.(uint64))
+	assert.Equal(t, GaugeData{false, false, 333}, packet.Value)
+	assert.Equal(t, "g", packet.Modifier)
+	assert.Equal(t, float32(1), packet.Sampling)
+
+	d = []byte("gaugor:-10|g")
+	packets = parseMessage(d)
+	assert.Equal(t, len(packets), 1)
+	packet = packets[0]
+	assert.Equal(t, "gaugor", packet.Bucket)
+	assert.Equal(t, GaugeData{true, true, 10}, packet.Value)
+	assert.Equal(t, "g", packet.Modifier)
+	assert.Equal(t, float32(1), packet.Sampling)
+
+	d = []byte("gaugor:+4|g")
+	packets = parseMessage(d)
+	assert.Equal(t, len(packets), 1)
+	packet = packets[0]
+	assert.Equal(t, "gaugor", packet.Bucket)
+	assert.Equal(t, GaugeData{true, false, 4}, packet.Value)
+	assert.Equal(t, "g", packet.Modifier)
+	assert.Equal(t, float32(1), packet.Sampling)
+
+	// >max(int64) && <max(uint64)
+	d = []byte("gaugor:18446744073709551606|g")
+	packets = parseMessage(d)
+	assert.Equal(t, len(packets), 1)
+	packet = packets[0]
+	assert.Equal(t, "gaugor", packet.Bucket)
+	assert.Equal(t, GaugeData{false, false, 18446744073709551606}, packet.Value)
 	assert.Equal(t, "g", packet.Modifier)
 	assert.Equal(t, float32(1), packet.Sampling)
 
@@ -82,7 +111,7 @@ func TestPacketParse(t *testing.T) {
 
 	packet = packets[1]
 	assert.Equal(t, "gauge", packet.Bucket)
-	assert.Equal(t, uint64(3), packet.Value.(uint64))
+	assert.Equal(t, GaugeData{false, false, 3}, packet.Value)
 	assert.Equal(t, "g", packet.Modifier)
 	assert.Equal(t, float32(1), packet.Sampling)
 
@@ -171,12 +200,36 @@ func TestGaugePacketHandling(t *testing.T) {
 
 	p := &Packet{
 		Bucket:   "gaugor",
-		Value:    uint64(333),
+		Value:    GaugeData{false, false, 333},
 		Modifier: "g",
 		Sampling: float32(1),
 	}
 	packetHandler(p)
 	assert.Equal(t, gauges["gaugor"], uint64(333))
+
+	// -10
+	p.Value = GaugeData{true, true, 10}
+	packetHandler(p)
+	assert.Equal(t, gauges["gaugor"], uint64(323))
+
+	// +4
+	p.Value = GaugeData{true, false, 4}
+	packetHandler(p)
+	assert.Equal(t, gauges["gaugor"], uint64(327))
+
+	// <0 overflow
+	p.Value = GaugeData{false, false, 10}
+	packetHandler(p)
+	p.Value = GaugeData{true, true, 20}
+	packetHandler(p)
+	assert.Equal(t, gauges["gaugor"], uint64(0))
+
+	// >2^64 overflow
+	p.Value = GaugeData{false, false, uint64(math.MaxUint64 - 10)}
+	packetHandler(p)
+	p.Value = GaugeData{true, false, 20}
+	packetHandler(p)
+	assert.Equal(t, gauges["gaugor"], uint64(math.MaxUint64))
 }
 
 func TestTimerPacketHandling(t *testing.T) {

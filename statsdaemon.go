@@ -32,6 +32,12 @@ type Packet struct {
 	Sampling float32
 }
 
+type GaugeData struct {
+	Relative bool
+	Negative bool
+	Value    uint64
+}
+
 type Uint64Slice []uint64
 
 func (s Uint64Slice) Len() int           { return len(s) }
@@ -80,6 +86,7 @@ var (
 	In              = make(chan *Packet, MAX_UNPROCESSED_PACKETS)
 	counters        = make(map[string]int64)
 	gauges          = make(map[string]uint64)
+	trackedGauges   = make(map[string]uint64)
 	timers          = make(map[string]Uint64Slice)
 	countInactivity = make(map[string]int64)
 )
@@ -122,7 +129,31 @@ func packetHandler(s *Packet) {
 		}
 		timers[s.Bucket] = append(timers[s.Bucket], s.Value.(uint64))
 	} else if s.Modifier == "g" {
-		gauges[s.Bucket] = s.Value.(uint64)
+		gaugeValue, _ := gauges[s.Bucket]
+
+		gaugeData := s.Value.(GaugeData)
+		if gaugeData.Relative {
+			if gaugeData.Negative {
+				// subtract checking for -ve numbers
+				if gaugeData.Value > gaugeValue {
+					gaugeValue = 0
+				} else {
+					gaugeValue -= gaugeData.Value
+				}
+			} else {
+				// watch out for overflows
+				if gaugeData.Value > (math.MaxUint64 - gaugeValue) {
+					gaugeValue = math.MaxUint64
+				} else {
+					gaugeValue += gaugeData.Value
+				}
+			}
+		} else {
+			gaugeValue = gaugeData.Value
+		}
+
+		gauges[s.Bucket] = gaugeValue
+
 	} else if s.Modifier == "c" {
 		_, ok := counters[s.Bucket]
 		if !ok {
@@ -212,12 +243,15 @@ func processCounters(buffer *bytes.Buffer, now int64) int64 {
 
 func processGauges(buffer *bytes.Buffer, now int64) int64 {
 	var num int64
+
 	for g, c := range gauges {
-		if c == math.MaxUint64 {
+		lastValue, ok := trackedGauges[g]
+
+		if ok && c == lastValue {
 			continue
 		}
 		fmt.Fprintf(buffer, "%s %d %d\n", g, c, now)
-		gauges[g] = math.MaxUint64
+		trackedGauges[g] = c
 		num++
 	}
 	return num
@@ -349,6 +383,28 @@ func parseMessage(data []byte) []*Packet {
 				log.Printf("ERROR: failed to ParseInt %s - %s", string(val), err)
 				continue
 			}
+		} else if mtypeStr[0] == 'g' {
+			var relative, negative bool
+			var stringToParse string
+
+			switch val[0] {
+			case '+', '-':
+				relative = true
+				negative = val[0] == '-'
+				stringToParse = string(val[1:])
+			default:
+				relative = false
+				negative = false
+				stringToParse = string(val)
+			}
+
+			gaugeValue, err := strconv.ParseUint(stringToParse, 10, 64)
+			if err != nil {
+				log.Printf("ERROR: failed to ParseUint %s - %s", string(val), err)
+				continue
+			}
+
+			value = GaugeData{relative, negative, gaugeValue}
 		} else {
 			value, err = strconv.ParseUint(string(val), 10, 64)
 			if err != nil {
