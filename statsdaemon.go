@@ -83,10 +83,11 @@ func init() {
 }
 
 var (
-	In       = make(chan *Packet, MAX_UNPROCESSED_PACKETS)
-	counters = make(map[string]int64)
-	gauges   = make(map[string]uint64)
-	timers   = make(map[string]Uint64Slice)
+	In              = make(chan *Packet, MAX_UNPROCESSED_PACKETS)
+	counters        = make(map[string]int64)
+	gauges          = make(map[string]uint64)
+	trackedGauges   = make(map[string]uint64)
+	timers          = make(map[string]Uint64Slice)
 )
 
 func monitor() {
@@ -121,7 +122,44 @@ func monitor() {
 				}
 				timers[s.Bucket] = append(timers[s.Bucket], s.Value.(uint64))
 			} else if s.Modifier == "g" {
-				gauges[s.Bucket] = s.Value.(uint64)
+
+                                var gaugeValue uint64 = 0
+				_, ok := gauges[s.Bucket]
+
+                                // initialise gaugeValue as either 0 or existing value
+                                if ok {
+                                        gaugeValue = gauges[s.Bucket]
+                                } else {
+                                        gaugeValue = 0
+                                }
+                                
+                                if s.Value.(GaugeData).Relative {
+
+                                        if s.Value.(GaugeData).Negative {
+
+                                                // subtract checking for -ve numbers
+                                                if s.Value.(GaugeData).Value > gaugeValue {
+                                                    gaugeValue = 0;
+                                                } else {
+                                                    gaugeValue -= s.Value.(GaugeData).Value;
+                                                }
+
+                                        } else {
+
+                                                // watch out for overflows
+                                                if s.Value.(GaugeData).Value > (math.MaxUint64 - gaugeValue) {
+                                                    gaugeValue = math.MaxUint64
+                                                } else {
+                                                    gaugeValue += s.Value.(GaugeData).Value
+                                                }
+                                        }
+
+                                } else {
+                                        gaugeValue = s.Value.(GaugeData).Value
+                                }
+
+				gauges[s.Bucket] = gaugeValue
+
 			} else {
 				v, ok := counters[s.Bucket]
 				if !ok || v < 0 {
@@ -211,12 +249,17 @@ func processCounters(buffer *bytes.Buffer, now int64) int64 {
 
 func processGauges(buffer *bytes.Buffer, now int64) int64 {
 	var num int64
+
 	for g, c := range gauges {
-		if c == math.MaxUint64 {
+
+                var lastValue uint64
+                lastValue, ok := trackedGauges[g] 
+
+		if ok && c == lastValue {
 			continue
 		}
 		fmt.Fprintf(buffer, "%s %d %d\n", g, c, now)
-		gauges[g] = math.MaxUint64
+		trackedGauges[g] = c 
 		num++
 	}
 	return num
