@@ -105,7 +105,6 @@ func monitor() {
 }
 
 func packetHandler(s *Packet) {
-
 	if *receiveCounter != "" {
 		v, ok := counters[*receiveCounter]
 		if !ok || v < 0 {
