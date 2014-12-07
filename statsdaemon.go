@@ -99,31 +99,36 @@ func monitor() {
 				log.Printf("ERROR: %s", err)
 			}
 		case s := <-In:
-			if *receiveCounter != "" {
-				v, ok := counters[*receiveCounter]
-				if !ok || v < 0 {
-					counters[*receiveCounter] = 0
-				}
-				counters[*receiveCounter] += 1
-			}
-
-			if s.Modifier == "ms" {
-				_, ok := timers[s.Bucket]
-				if !ok {
-					var t Uint64Slice
-					timers[s.Bucket] = t
-				}
-				timers[s.Bucket] = append(timers[s.Bucket], s.Value.(uint64))
-			} else if s.Modifier == "g" {
-				gauges[s.Bucket] = s.Value.(uint64)
-			} else {
-				v, ok := counters[s.Bucket]
-				if !ok || v < 0 {
-					counters[s.Bucket] = 0
-				}
-				counters[s.Bucket] += int64(float64(s.Value.(int64)) * float64(1/s.Sampling))
-			}
+			packetHandler(s)
 		}
+	}
+}
+
+func packetHandler(s *Packet) {
+
+	if *receiveCounter != "" {
+		v, ok := counters[*receiveCounter]
+		if !ok || v < 0 {
+			counters[*receiveCounter] = 0
+		}
+		counters[*receiveCounter] += 1
+	}
+
+	if s.Modifier == "ms" {
+		_, ok := timers[s.Bucket]
+		if !ok {
+			var t Uint64Slice
+			timers[s.Bucket] = t
+		}
+		timers[s.Bucket] = append(timers[s.Bucket], s.Value.(uint64))
+	} else if s.Modifier == "g" {
+		gauges[s.Bucket] = s.Value.(uint64)
+	} else {
+		v, ok := counters[s.Bucket]
+		if !ok || v < 0 {
+			counters[s.Bucket] = 0
+		}
+		counters[s.Bucket] += int64(float64(s.Value.(int64)) * float64(1/s.Sampling))
 	}
 }
 
