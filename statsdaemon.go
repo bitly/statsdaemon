@@ -106,68 +106,73 @@ func monitor() {
 				log.Printf("ERROR: %s", err)
 			}
 		case s := <-In:
-			if *receiveCounter != "" {
-				v, ok := counters[*receiveCounter]
-				if !ok || v < 0 {
-					counters[*receiveCounter] = 0
-				}
-				counters[*receiveCounter] += 1
-			}
-
-			if s.Modifier == "ms" {
-				_, ok := timers[s.Bucket]
-				if !ok {
-					var t Uint64Slice
-					timers[s.Bucket] = t
-				}
-				timers[s.Bucket] = append(timers[s.Bucket], s.Value.(uint64))
-			} else if s.Modifier == "g" {
-
-                                var gaugeValue uint64 = 0
-				_, ok := gauges[s.Bucket]
-
-                                // initialise gaugeValue as either 0 or existing value
-                                if ok {
-                                        gaugeValue = gauges[s.Bucket]
-                                } else {
-                                        gaugeValue = 0
-                                }
-                                
-                                if s.Value.(GaugeData).Relative {
-
-                                        if s.Value.(GaugeData).Negative {
-
-                                                // subtract checking for -ve numbers
-                                                if s.Value.(GaugeData).Value > gaugeValue {
-                                                    gaugeValue = 0;
-                                                } else {
-                                                    gaugeValue -= s.Value.(GaugeData).Value;
-                                                }
-
-                                        } else {
-
-                                                // watch out for overflows
-                                                if s.Value.(GaugeData).Value > (math.MaxUint64 - gaugeValue) {
-                                                    gaugeValue = math.MaxUint64
-                                                } else {
-                                                    gaugeValue += s.Value.(GaugeData).Value
-                                                }
-                                        }
-
-                                } else {
-                                        gaugeValue = s.Value.(GaugeData).Value
-                                }
-
-				gauges[s.Bucket] = gaugeValue
-
-			} else {
-				v, ok := counters[s.Bucket]
-				if !ok || v < 0 {
-					counters[s.Bucket] = 0
-				}
-				counters[s.Bucket] += int64(float64(s.Value.(int64)) * float64(1/s.Sampling))
-			}
+			packetHandler(s)
 		}
+	}
+}
+
+func packetHandler(s *Packet) {
+
+	if *receiveCounter != "" {
+		v, ok := counters[*receiveCounter]
+		if !ok || v < 0 {
+			counters[*receiveCounter] = 0
+		}
+		counters[*receiveCounter] += 1
+	}
+
+	if s.Modifier == "ms" {
+		_, ok := timers[s.Bucket]
+		if !ok {
+			var t Uint64Slice
+			timers[s.Bucket] = t
+		}
+		timers[s.Bucket] = append(timers[s.Bucket], s.Value.(uint64))
+	} else if s.Modifier == "g" {
+
+                var gaugeValue uint64 = 0
+		_, ok := gauges[s.Bucket]
+
+                // initialise gaugeValue as either 0 or existing value
+                if ok {
+                        gaugeValue = gauges[s.Bucket]
+                } else {
+                        gaugeValue = 0
+                }
+
+                if s.Value.(GaugeData).Relative {
+
+                        if s.Value.(GaugeData).Negative {
+
+                                // subtract checking for -ve numbers
+                                if s.Value.(GaugeData).Value > gaugeValue {
+                                    gaugeValue = 0;
+                                } else {
+                                    gaugeValue -= s.Value.(GaugeData).Value;
+                                }
+
+                        } else {
+
+                                // watch out for overflows
+                                if s.Value.(GaugeData).Value > (math.MaxUint64 - gaugeValue) {
+                                    gaugeValue = math.MaxUint64
+                                } else {
+                                    gaugeValue += s.Value.(GaugeData).Value
+                                }
+                        }
+
+                } else {
+                        gaugeValue = s.Value.(GaugeData).Value
+                }
+
+		gauges[s.Bucket] = gaugeValue
+
+	} else {
+		v, ok := counters[s.Bucket]
+		if !ok || v < 0 {
+			counters[s.Bucket] = 0
+		}
+		counters[s.Bucket] += int64(float64(s.Value.(int64)) * float64(1/s.Sampling))
 	}
 }
 
