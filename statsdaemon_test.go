@@ -145,7 +145,6 @@ func TestPacketParse(t *testing.T) {
 }
 
 func TestReceiveCounterPacketHandling(t *testing.T) {
-
 	counters = make(map[string]int64)
 	*receiveCounter = "countme"
 
@@ -163,7 +162,6 @@ func TestReceiveCounterPacketHandling(t *testing.T) {
 }
 
 func TestCountPacketHandling(t *testing.T) {
-
 	counters = make(map[string]int64)
 
 	p := &Packet {
@@ -186,7 +184,6 @@ func TestCountPacketHandling(t *testing.T) {
 }
 
 func TestGaugePacketHandling(t *testing.T) {
-
 	gauges = make(map[string]uint64)
 
 	p := &Packet {
@@ -197,12 +194,10 @@ func TestGaugePacketHandling(t *testing.T) {
 	}
 	packetHandler(p)
 	assert.Equal(t, gauges["gaugor"], uint64(333))
-
 }
 
 
 func TestTimerPacketHandling(t *testing.T) {
-
 	timers = make(map[string]Uint64Slice)
 
 	p := &Packet {
@@ -222,7 +217,6 @@ func TestTimerPacketHandling(t *testing.T) {
 }
 
 func TestMean(t *testing.T) {
-
 	timers = make(map[string]Uint64Slice)
 
 	// Some data with expected mean of 20
