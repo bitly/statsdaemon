@@ -81,6 +81,7 @@ var (
 	counters = make(map[string]int64)
 	gauges   = make(map[string]uint64)
 	timers   = make(map[string]Uint64Slice)
+	countInactivity = make(map[string]int64)
 )
 
 func monitor() {
@@ -123,8 +124,8 @@ func packetHandler(s *Packet) {
 	} else if s.Modifier == "g" {
 		gauges[s.Bucket] = s.Value.(uint64)
 	} else {
-		v, ok := counters[s.Bucket]
-		if !ok || v < 0 {
+		_, ok := counters[s.Bucket]
+		if !ok {
 			counters[s.Bucket] = 0
 		}
 		counters[s.Bucket] += int64(float64(s.Value.(int64)) * float64(1/s.Sampling))
@@ -186,26 +187,25 @@ func submit(deadline time.Time) error {
 func processCounters(buffer *bytes.Buffer, now int64) int64 {
 	var num int64
 	// continue sending zeros for counters for a short period of time even if we have no new data
-	// note we use the same in-memory value to denote both the actual value of the counter (value >= 0)
-	// as well as how many turns to keep the counter for (value < 0)
-	// for more context see https://github.com/bitly/statsdaemon/pull/8
-	for s, c := range counters {
-		switch {
-		case c <= *persistCountKeys:
-			// consider this purgable
-			delete(counters, s)
-			continue
-		case c < 0:
-			counters[s] -= 1
-			fmt.Fprintf(buffer, "%s %d %d\n", s, 0, now)
-		case c >= 0:
-			counters[s] = -1
-			fmt.Fprintf(buffer, "%s %d %d\n", s, c, now)
-		}
+	for bucket, value := range counters {
+		fmt.Fprintf(buffer, "%s %d %d\n", bucket, value, now)
+		delete(counters, bucket)
+		countInactivity[bucket] = 0
 		num++
+	}
+	for bucket, purgeCount := range countInactivity {
+		if purgeCount > 0 {
+			fmt.Fprintf(buffer, "%s %d %d\n", bucket, 0, now)
+			num++
+		}
+		countInactivity[bucket] += 1
+		if countInactivity[bucket] > *persistCountKeys {
+			delete(countInactivity, bucket)
+		}
 	}
 	return num
 }
+
 
 func processGauges(buffer *bytes.Buffer, now int64) int64 {
 	var num int64
@@ -408,7 +408,6 @@ func main() {
 
 	signalchan = make(chan os.Signal, 1)
 	signal.Notify(signalchan, syscall.SIGTERM)
-	*persistCountKeys = -1 * (*persistCountKeys)
 
 	go udpListener()
 	monitor()
