@@ -77,10 +77,10 @@ func init() {
 }
 
 var (
-	In       = make(chan *Packet, MAX_UNPROCESSED_PACKETS)
-	counters = make(map[string]int64)
-	gauges   = make(map[string]uint64)
-	timers   = make(map[string]Uint64Slice)
+	In              = make(chan *Packet, MAX_UNPROCESSED_PACKETS)
+	counters        = make(map[string]int64)
+	gauges          = make(map[string]uint64)
+	timers          = make(map[string]Uint64Slice)
 	countInactivity = make(map[string]int64)
 )
 
@@ -205,7 +205,6 @@ func processCounters(buffer *bytes.Buffer, now int64) int64 {
 	}
 	return num
 }
-
 
 func processGauges(buffer *bytes.Buffer, now int64) int64 {
 	var num int64

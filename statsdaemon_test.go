@@ -120,9 +120,9 @@ func TestReceiveCounterPacketHandling(t *testing.T) {
 	counters = make(map[string]int64)
 	*receiveCounter = "countme"
 
-	p := &Packet {
-		Bucket: "gorets",
-		Value:	int64(100),
+	p := &Packet{
+		Bucket:   "gorets",
+		Value:    int64(100),
 		Modifier: "c",
 		Sampling: float32(1),
 	}
@@ -136,9 +136,9 @@ func TestReceiveCounterPacketHandling(t *testing.T) {
 func TestCountPacketHandling(t *testing.T) {
 	counters = make(map[string]int64)
 
-	p := &Packet {
-		Bucket: "gorets",
-		Value:	int64(100),
+	p := &Packet{
+		Bucket:   "gorets",
+		Value:    int64(100),
 		Modifier: "c",
 		Sampling: float32(1),
 	}
@@ -161,9 +161,9 @@ func TestCountPacketHandling(t *testing.T) {
 func TestGaugePacketHandling(t *testing.T) {
 	gauges = make(map[string]uint64)
 
-	p := &Packet {
-		Bucket: "gaugor",
-		Value:	uint64(333),
+	p := &Packet{
+		Bucket:   "gaugor",
+		Value:    uint64(333),
 		Modifier: "g",
 		Sampling: float32(1),
 	}
@@ -171,13 +171,12 @@ func TestGaugePacketHandling(t *testing.T) {
 	assert.Equal(t, gauges["gaugor"], uint64(333))
 }
 
-
 func TestTimerPacketHandling(t *testing.T) {
 	timers = make(map[string]Uint64Slice)
 
-	p := &Packet {
-		Bucket: "glork",
-		Value:	uint64(320),
+	p := &Packet{
+		Bucket:   "glork",
+		Value:    uint64(320),
 		Modifier: "ms",
 		Sampling: float32(1),
 	}
@@ -205,13 +204,13 @@ func TestProcessCounters(t *testing.T) {
 	assert.Equal(t, buffer.String(), "gorets 123 1418052649\n")
 
 	// run processCounters() enough times to make sure it purges items
-	for i := 0; i<int(*persistCountKeys) + 10; i++ {
+	for i := 0; i < int(*persistCountKeys)+10; i++ {
 		num = processCounters(&buffer, now)
 	}
 	lines := bytes.Split(buffer.Bytes(), []byte("\n"))
 
 	// expect two more lines - the good one and an empty one at the end
-	assert.Equal(t, len(lines), int(*persistCountKeys + 2))
+	assert.Equal(t, len(lines), int(*persistCountKeys+2))
 	assert.Equal(t, string(lines[0]), "gorets 123 1418052649")
 	assert.Equal(t, string(lines[*persistCountKeys]), "gorets 0 1418052649")
 }
