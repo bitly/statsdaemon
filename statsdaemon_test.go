@@ -120,9 +120,9 @@ func TestReceiveCounterPacketHandling(t *testing.T) {
 	counters = make(map[string]int64)
 	*receiveCounter = "countme"
 
-	p := &Packet {
-		Bucket: "gorets",
-		Value:	int64(100),
+	p := &Packet{
+		Bucket:   "gorets",
+		Value:    int64(100),
 		Modifier: "c",
 		Sampling: float32(1),
 	}
@@ -136,9 +136,9 @@ func TestReceiveCounterPacketHandling(t *testing.T) {
 func TestCountPacketHandling(t *testing.T) {
 	counters = make(map[string]int64)
 
-	p := &Packet {
-		Bucket: "gorets",
-		Value:	int64(100),
+	p := &Packet{
+		Bucket:   "gorets",
+		Value:    int64(100),
 		Modifier: "c",
 		Sampling: float32(1),
 	}
@@ -158,9 +158,9 @@ func TestCountPacketHandling(t *testing.T) {
 func TestGaugePacketHandling(t *testing.T) {
 	gauges = make(map[string]uint64)
 
-	p := &Packet {
-		Bucket: "gaugor",
-		Value:	uint64(333),
+	p := &Packet{
+		Bucket:   "gaugor",
+		Value:    uint64(333),
 		Modifier: "g",
 		Sampling: float32(1),
 	}
@@ -168,13 +168,12 @@ func TestGaugePacketHandling(t *testing.T) {
 	assert.Equal(t, gauges["gaugor"], uint64(333))
 }
 
-
 func TestTimerPacketHandling(t *testing.T) {
 	timers = make(map[string]Uint64Slice)
 
-	p := &Packet {
-		Bucket: "glork",
-		Value:	uint64(320),
+	p := &Packet{
+		Bucket:   "glork",
+		Value:    uint64(320),
 		Modifier: "ms",
 		Sampling: float32(1),
 	}
