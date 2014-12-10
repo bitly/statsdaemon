@@ -70,6 +70,7 @@ var (
 	receiveCounter   = flag.String("receive-counter", "", "Metric name for total metrics recevied per interval")
 	percentThreshold = Percentiles{}
 	prefix           = flag.String("prefix", "", "Prefix for all stats")
+	logTo            = flag.String("logTo", "", "File location to log")
 )
 
 func init() {
@@ -402,12 +403,35 @@ func udpListener() {
 	}
 }
 
+func setupLogging() *os.File {
+	if *logTo != "" {
+		f, err := os.OpenFile(*logTo, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+		if err != nil {
+			log.Print("Log file won't open", err)
+			return nil
+		} else {
+			log.SetOutput(f)
+			log.Print("Log path: ", *logTo)
+			return f
+		}
+	}
+
+	return nil
+}
+
 func main() {
 	flag.Parse()
 
 	if *showVersion {
 		fmt.Printf("statsdaemon v%s (built w/%s)\n", VERSION, runtime.Version())
 		return
+	}
+
+	if *logTo != "" {
+		f := setupLogging()
+		if f != nil {
+			defer f.Close()
+		}
 	}
 
 	signalchan = make(chan os.Signal, 1)
