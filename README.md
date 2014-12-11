@@ -32,4 +32,5 @@ Usage of ./statsdaemon:
   -persist-count-keys=60: number of flush-interval's to persist count keys
   -receive-counter="": Metric name for total metrics recevied per interval
   -version=false: print version string
+  -log-to="": Location of log file (uses stdout/stderr if none supplied)
 ```

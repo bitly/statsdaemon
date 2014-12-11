@@ -70,7 +70,7 @@ var (
 	receiveCounter   = flag.String("receive-counter", "", "Metric name for total metrics recevied per interval")
 	percentThreshold = Percentiles{}
 	prefix           = flag.String("prefix", "", "Prefix for all stats")
-	logTo            = flag.String("logTo", "", "File location to log")
+	logTo            = flag.String("log-to", "", "Location of log file")
 )
 
 func init() {
