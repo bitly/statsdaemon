@@ -1,0 +1,3 @@
+# Additional settings for statsdaemon
+
+STATSDAEMON_OPTS=

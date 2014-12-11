@@ -1,0 +1,6 @@
+#!/bin/bash
+set -o errexit
+
+if [ -e /etc/init/statsdaemon.conf ]; then
+  service statsdaemon stop || echo ""
+fi
