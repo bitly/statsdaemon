@@ -153,6 +153,9 @@ func TestCountPacketHandling(t *testing.T) {
 	packetHandler(p)
 	assert.Equal(t, counters["gorets"], int64(99))
 
+	p.Value = int64(-100)
+	packetHandler(p)
+	assert.Equal(t, counters["gorets"], int64(-1))
 }
 
 func TestGaugePacketHandling(t *testing.T) {
@@ -185,6 +188,31 @@ func TestTimerPacketHandling(t *testing.T) {
 	packetHandler(p)
 	assert.Equal(t, len(timers["glork"]), 2)
 	assert.Equal(t, timers["glork"][1], uint64(100))
+}
+
+func TestProcessCounters(t *testing.T) {
+
+	*persistCountKeys = int64(10)
+	counters = make(map[string]int64)
+	var buffer bytes.Buffer
+	now := int64(1418052649)
+
+	counters["gorets"] = int64(123)
+
+	num := processCounters(&buffer, now)
+	assert.Equal(t, num, int64(1))
+	assert.Equal(t, buffer.String(), "gorets 123 1418052649\n")
+
+	// run processCounters() enough times to make sure it purges items
+	for i := 0; i < int(*persistCountKeys)+10; i++ {
+		num = processCounters(&buffer, now)
+	}
+	lines := bytes.Split(buffer.Bytes(), []byte("\n"))
+
+	// expect two more lines - the good one and an empty one at the end
+	assert.Equal(t, len(lines), int(*persistCountKeys+2))
+	assert.Equal(t, string(lines[0]), "gorets 123 1418052649")
+	assert.Equal(t, string(lines[*persistCountKeys]), "gorets 0 1418052649")
 }
 
 func TestMean(t *testing.T) {
