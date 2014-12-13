@@ -116,6 +116,15 @@ func TestPacketParse(t *testing.T) {
 	assert.Equal(t, len(packets), 1)
 }
 
+func TestMalformedDataHandling(t *testing.T) {
+
+	// reported as issue #45
+	d := []byte("deploys.test.myservice4:100|t")
+	packets := parseMessage(d)
+	packetHandler(packets[0])
+
+}
+
 func TestReceiveCounterPacketHandling(t *testing.T) {
 	counters = make(map[string]int64)
 	*receiveCounter = "countme"
