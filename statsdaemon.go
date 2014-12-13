@@ -123,7 +123,7 @@ func packetHandler(s *Packet) {
 		timers[s.Bucket] = append(timers[s.Bucket], s.Value.(uint64))
 	} else if s.Modifier == "g" {
 		gauges[s.Bucket] = s.Value.(uint64)
-	} else {
+	} else if s.Modifier == "c" {
 		_, ok := counters[s.Bucket]
 		if !ok {
 			counters[s.Bucket] = 0
