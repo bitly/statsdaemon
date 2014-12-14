@@ -142,6 +142,22 @@ func TestPacketParse(t *testing.T) {
 	d = []byte("gorets:5|ms|@")
 	packets = parseMessage(d)
 	assert.Equal(t, len(packets), 1)
+
+	d = []byte("")
+	packets = parseMessage(d)
+	assert.Equal(t, len(packets), 0)
+
+	d = []byte("gorets:xxx|c")
+	packets = parseMessage(d)
+	assert.Equal(t, len(packets), 0)
+
+	d = []byte("gaugor:xxx|g")
+	packets = parseMessage(d)
+	assert.Equal(t, len(packets), 0)
+
+	d = []byte("gaugor:xxx|z")
+	packets = parseMessage(d)
+	assert.Equal(t, len(packets), 0)
 }
 
 func TestMalformedDataHandling(t *testing.T) {
@@ -284,8 +300,7 @@ func TestProcessTimers(t *testing.T) {
 	now := int64(1418052649)
 
 	var buffer bytes.Buffer
-	var num int64
-	num += processTimers(&buffer, now, Percentiles{})
+	num := processTimers(&buffer, now, Percentiles{})
 
 	lines := bytes.Split(buffer.Bytes(), []byte("\n"))
 
@@ -294,6 +309,27 @@ func TestProcessTimers(t *testing.T) {
 	assert.Equal(t, string(lines[1]), "response_time.upper 30 1418052649")
 	assert.Equal(t, string(lines[2]), "response_time.lower 0 1418052649")
 	assert.Equal(t, string(lines[3]), "response_time.count 3 1418052649")
+
+	num = processTimers(&buffer, now, Percentiles{})
+	assert.Equal(t, num, int64(0))
+}
+
+func TestProcessGauges(t *testing.T) {
+	// Some data with expected mean of 20
+	gauges = make(map[string]uint64)
+	gauges["gaugor"] = 12345
+
+	now := int64(1418052649)
+
+	var buffer bytes.Buffer
+
+	num := processGauges(&buffer, now)
+	assert.Equal(t, num, int64(1))
+	assert.Equal(t, buffer.String(), "gaugor 12345 1418052649\n")
+
+	gauges["gaugor"] = 12345
+	num = processGauges(&buffer, now)
+	assert.Equal(t, num, int64(0))
 }
 
 func TestProcessTimersUpperPercentile(t *testing.T) {
@@ -304,8 +340,7 @@ func TestProcessTimersUpperPercentile(t *testing.T) {
 	now := int64(1418052649)
 
 	var buffer bytes.Buffer
-	var num int64
-	num += processTimers(&buffer, now, Percentiles{
+	num := processTimers(&buffer, now, Percentiles{
 		&Percentile{
 			75,
 			"75",
@@ -325,8 +360,7 @@ func TestProcessTimesLowerPercentile(t *testing.T) {
 	now := int64(1418052649)
 
 	var buffer bytes.Buffer
-	var num int64
-	num += processTimers(&buffer, now, Percentiles{
+	num := processTimers(&buffer, now, Percentiles{
 		&Percentile{
 			-75,
 			"-75",
