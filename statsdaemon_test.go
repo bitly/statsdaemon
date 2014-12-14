@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"github.com/bmizerany/assert"
 	"math/rand"
-	"regexp"
 	"strconv"
 	"testing"
 	"time"
@@ -224,81 +223,67 @@ func TestProcessCounters(t *testing.T) {
 	assert.Equal(t, string(lines[*persistCountKeys]), "gorets 0 1418052649")
 }
 
-func TestMean(t *testing.T) {
-	timers = make(map[string]Uint64Slice)
-
+func TestProcessTimers(t *testing.T) {
 	// Some data with expected mean of 20
-	d := []byte("response_time:0|ms\nresponse_time:30|ms\nresponse_time:30|ms")
-	packets := parseMessage(d)
+	timers = make(map[string]Uint64Slice)
+	timers["response_time"] = []uint64{0, 30, 30}
 
-	for _, s := range packets {
-		timers[s.Bucket] = append(timers[s.Bucket], s.Value.(uint64))
-	}
+	now := int64(1418052649)
 
-	var buff bytes.Buffer
+	var buffer bytes.Buffer
 	var num int64
-	num += processTimers(&buff, time.Now().Unix(), Percentiles{})
-	assert.Equal(t, num, int64(1))
-	dataForGraphite := buff.String()
-	pattern := `response_time\.mean 20\.[0-9]+ `
-	meanRegexp := regexp.MustCompile(pattern)
+	num += processTimers(&buffer, now, Percentiles{})
 
-	matched := meanRegexp.MatchString(dataForGraphite)
-	assert.Equal(t, matched, true)
+	lines := bytes.Split(buffer.Bytes(), []byte("\n"))
+
+	assert.Equal(t, num, int64(1))
+	assert.Equal(t, string(lines[0]), "response_time.mean 20.000000 1418052649")
+	assert.Equal(t, string(lines[1]), "response_time.upper 30 1418052649")
+	assert.Equal(t, string(lines[2]), "response_time.lower 0 1418052649")
+	assert.Equal(t, string(lines[3]), "response_time.count 3 1418052649")
 }
 
-func TestUpperPercentile(t *testing.T) {
-	// Some data with expected mean of 20
-	d := []byte("time:0|ms\ntime:1|ms\ntime:2|ms\ntime:3|ms")
-	packets := parseMessage(d)
+func TestProcessTimersUpperPercentile(t *testing.T) {
+	// Some data with expected 75% of 2
+	timers = make(map[string]Uint64Slice)
+	timers["response_time"] = []uint64{0, 1, 2, 3}
 
-	for _, s := range packets {
-		timers[s.Bucket] = append(timers[s.Bucket], s.Value.(uint64))
-	}
+	now := int64(1418052649)
 
-	var buff bytes.Buffer
+	var buffer bytes.Buffer
 	var num int64
-	num += processTimers(&buff, time.Now().Unix(), Percentiles{
+	num += processTimers(&buffer, now, Percentiles{
 		&Percentile{
 			75,
 			"75",
 		},
 	})
-	assert.Equal(t, num, int64(1))
-	dataForGraphite := buff.String()
 
-	meanRegexp := regexp.MustCompile(`time\.upper_75 2 `)
-	matched := meanRegexp.MatchString(dataForGraphite)
-	assert.Equal(t, matched, true)
+	lines := bytes.Split(buffer.Bytes(), []byte("\n"))
+
+	assert.Equal(t, num, int64(1))
+	assert.Equal(t, string(lines[0]), "response_time.upper_75 2 1418052649")
 }
 
-func TestLowerPercentile(t *testing.T) {
-	// Some data with expected mean of 20
-	d := []byte("time:0|ms\ntime:1|ms\ntime:2|ms\ntime:3|ms")
-	packets := parseMessage(d)
+func TestProcessTimesLowerPercentile(t *testing.T) {
+	timers = make(map[string]Uint64Slice)
+	timers["time"] = []uint64{0, 1, 2, 3}
 
-	for _, s := range packets {
-		timers[s.Bucket] = append(timers[s.Bucket], s.Value.(uint64))
-	}
+	now := int64(1418052649)
 
-	var buff bytes.Buffer
+	var buffer bytes.Buffer
 	var num int64
-	num += processTimers(&buff, time.Now().Unix(), Percentiles{
+	num += processTimers(&buffer, now, Percentiles{
 		&Percentile{
 			-75,
 			"-75",
 		},
 	})
+
+	lines := bytes.Split(buffer.Bytes(), []byte("\n"))
+
 	assert.Equal(t, num, int64(1))
-	dataForGraphite := buff.String()
-
-	meanRegexp := regexp.MustCompile(`time\.upper_75 1 `)
-	matched := meanRegexp.MatchString(dataForGraphite)
-	assert.Equal(t, matched, false)
-
-	meanRegexp = regexp.MustCompile(`time\.lower_75 1 `)
-	matched = meanRegexp.MatchString(dataForGraphite)
-	assert.Equal(t, matched, true)
+	assert.Equal(t, string(lines[0]), "time.lower_75 1 1418052649")
 }
 
 func BenchmarkManyDifferentSensors(t *testing.B) {
