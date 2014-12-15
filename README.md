@@ -7,8 +7,8 @@ on [amir/gographite](https://github.com/amir/gographite)).
 Supports
 
 * Timing (with optional percentiles)
-* Counters (with optional sampling)
-* Gauges
+* Counters (positive and negative with optional sampling)
+* Gauges (including relative operations)
 
 [![Build Status](https://secure.travis-ci.org/bitly/statsdaemon.png)](http://travis-ci.org/bitly/statsdaemon)
 
