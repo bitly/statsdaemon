@@ -307,13 +307,12 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 			fmt.Fprintf(buffer, tmpl, u, pctstr, maxAtThreshold, now)
 		}
 
-		var z Uint64Slice
-		timers[u] = z
-
 		fmt.Fprintf(buffer, "%s.mean %f %d\n", u, mean, now)
 		fmt.Fprintf(buffer, "%s.upper %d %d\n", u, max, now)
 		fmt.Fprintf(buffer, "%s.lower %d %d\n", u, min, now)
 		fmt.Fprintf(buffer, "%s.count %d %d\n", u, count, now)
+
+		delete(timers, u)
 	}
 	return num
 }
