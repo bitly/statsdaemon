@@ -17,7 +17,7 @@ var commonPercentiles = Percentiles{
 	},
 }
 
-func TestPacketParse(t *testing.T) {
+func TestPacketParseGauge(t *testing.T) {
 	d := []byte("gaugor:333|g")
 	packets := parseMessage(d)
 	assert.Equal(t, len(packets), 1)
@@ -54,11 +54,13 @@ func TestPacketParse(t *testing.T) {
 	assert.Equal(t, GaugeData{false, false, 18446744073709551606}, packet.Value)
 	assert.Equal(t, "g", packet.Modifier)
 	assert.Equal(t, float32(1), packet.Sampling)
+}
 
-	d = []byte("gorets:2|c|@0.1")
-	packets = parseMessage(d)
+func TestPacketParseCount(t *testing.T) {
+	d := []byte("gorets:2|c|@0.1")
+	packets := parseMessage(d)
 	assert.Equal(t, len(packets), 1)
-	packet = packets[0]
+	packet := packets[0]
 	assert.Equal(t, "gorets", packet.Bucket)
 	assert.Equal(t, int64(2), packet.Value.(int64))
 	assert.Equal(t, "c", packet.Modifier)
@@ -81,20 +83,35 @@ func TestPacketParse(t *testing.T) {
 	assert.Equal(t, int64(-4), packet.Value.(int64))
 	assert.Equal(t, "c", packet.Modifier)
 	assert.Equal(t, float32(1), packet.Sampling)
+}
 
-	d = []byte("glork:320|ms")
-	packets = parseMessage(d)
+func TestPacketParseTimer(t *testing.T) {
+	d := []byte("glork:320|ms")
+	packets := parseMessage(d)
 	assert.Equal(t, len(packets), 1)
-	packet = packets[0]
+	packet := packets[0]
 	assert.Equal(t, "glork", packet.Bucket)
 	assert.Equal(t, uint64(320), packet.Value.(uint64))
 	assert.Equal(t, "ms", packet.Modifier)
 	assert.Equal(t, float32(1), packet.Sampling)
+}
 
-	d = []byte("a.key.with-0.dash:4|c")
-	packets = parseMessage(d)
+func TestPacketParseSet(t *testing.T) {
+	d := []byte("uniques:765|s")
+	packets := parseMessage(d)
 	assert.Equal(t, len(packets), 1)
-	packet = packets[0]
+	packet := packets[0]
+	assert.Equal(t, "uniques", packet.Bucket)
+	assert.Equal(t, "765", packet.Value)
+	assert.Equal(t, "s", packet.Modifier)
+	assert.Equal(t, float32(1), packet.Sampling)
+}
+
+func TestPacketParseMisc(t *testing.T) {
+	d := []byte("a.key.with-0.dash:4|c")
+	packets := parseMessage(d)
+	assert.Equal(t, len(packets), 1)
+	packet := packets[0]
 	assert.Equal(t, "a.key.with-0.dash", packet.Bucket)
 	assert.Equal(t, int64(4), packet.Value.(int64))
 	assert.Equal(t, "c", packet.Modifier)
@@ -158,15 +175,11 @@ func TestPacketParse(t *testing.T) {
 	d = []byte("gaugor:xxx|z")
 	packets = parseMessage(d)
 	assert.Equal(t, len(packets), 0)
-}
-
-func TestMalformedDataHandling(t *testing.T) {
 
 	// reported as issue #45
-	d := []byte("deploys.test.myservice4:100|t")
-	packets := parseMessage(d)
+	d = []byte("deploys.test.myservice4:100|t")
+	packets = parseMessage(d)
 	packetHandler(packets[0])
-
 }
 
 func TestReceiveCounterPacketHandling(t *testing.T) {
@@ -267,6 +280,25 @@ func TestTimerPacketHandling(t *testing.T) {
 	assert.Equal(t, timers["glork"][1], uint64(100))
 }
 
+func TestSetPacketHandling(t *testing.T) {
+	sets = make(map[string][]string)
+
+	p := &Packet{
+		Bucket:   "uniques",
+		Value:    "765",
+		Modifier: "s",
+		Sampling: float32(1),
+	}
+	packetHandler(p)
+	assert.Equal(t, len(sets["uniques"]), 1)
+	assert.Equal(t, sets["uniques"][0], "765")
+
+	p.Value = "567"
+	packetHandler(p)
+	assert.Equal(t, len(sets["uniques"]), 2)
+	assert.Equal(t, sets["uniques"][1], "567")
+}
+
 func TestProcessCounters(t *testing.T) {
 
 	*persistCountKeys = int64(10)
@@ -329,6 +361,31 @@ func TestProcessGauges(t *testing.T) {
 
 	gauges["gaugor"] = 12345
 	num = processGauges(&buffer, now)
+	assert.Equal(t, num, int64(0))
+}
+
+func TestProcessSets(t *testing.T) {
+	sets = make(map[string][]string)
+
+	now := int64(1418052649)
+
+	var buffer bytes.Buffer
+
+	// three unique values
+	sets["uniques"] = []string{"123", "234", "345"}
+	num := processSets(&buffer, now)
+	assert.Equal(t, num, int64(1))
+	assert.Equal(t, buffer.String(), "uniques 3 1418052649\n")
+
+	// one value is repeated
+	buffer.Reset()
+	sets["uniques"] = []string{"123", "234", "234"}
+	num = processSets(&buffer, now)
+	assert.Equal(t, num, int64(1))
+	assert.Equal(t, buffer.String(), "uniques 2 1418052649\n")
+
+	// make sure sets are purged
+	num = processSets(&buffer, now)
 	assert.Equal(t, num, int64(0))
 }
 
