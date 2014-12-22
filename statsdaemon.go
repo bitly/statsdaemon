@@ -260,10 +260,6 @@ func processGauges(buffer *bytes.Buffer, now int64) int64 {
 func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 	var num int64
 	for u, t := range timers {
-		if len(t) == 0 {
-			continue
-		}
-
 		num++
 
 		sort.Sort(t)
