@@ -9,6 +9,7 @@ Supports
 * Timing (with optional percentiles)
 * Counters (positive and negative with optional sampling)
 * Gauges (including relative operations)
+* Sets
 
 [![Build Status](https://secure.travis-ci.org/bitly/statsdaemon.png)](http://travis-ci.org/bitly/statsdaemon)
 

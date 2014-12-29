@@ -89,6 +89,7 @@ var (
 	trackedGauges   = make(map[string]uint64)
 	timers          = make(map[string]Uint64Slice)
 	countInactivity = make(map[string]int64)
+	sets            = make(map[string][]string)
 )
 
 func monitor() {
@@ -121,14 +122,15 @@ func packetHandler(s *Packet) {
 		counters[*receiveCounter] += 1
 	}
 
-	if s.Modifier == "ms" {
+	switch s.Modifier {
+	case "ms":
 		_, ok := timers[s.Bucket]
 		if !ok {
 			var t Uint64Slice
 			timers[s.Bucket] = t
 		}
 		timers[s.Bucket] = append(timers[s.Bucket], s.Value.(uint64))
-	} else if s.Modifier == "g" {
+	case "g":
 		gaugeValue, _ := gauges[s.Bucket]
 
 		gaugeData := s.Value.(GaugeData)
@@ -153,13 +155,18 @@ func packetHandler(s *Packet) {
 		}
 
 		gauges[s.Bucket] = gaugeValue
-
-	} else if s.Modifier == "c" {
+	case "c":
 		_, ok := counters[s.Bucket]
 		if !ok {
 			counters[s.Bucket] = 0
 		}
 		counters[s.Bucket] += int64(float64(s.Value.(int64)) * float64(1/s.Sampling))
+	case "s":
+		_, ok := sets[s.Bucket]
+		if !ok {
+			sets[s.Bucket] = make([]string, 0)
+		}
+		sets[s.Bucket] = append(sets[s.Bucket], s.Value.(string))
 	}
 }
 
@@ -180,6 +187,7 @@ func submit(deadline time.Time) error {
 			processCounters(&buffer, now)
 			processGauges(&buffer, now)
 			processTimers(&buffer, now, percentThreshold)
+			processSets(&buffer, now)
 		}
 		errmsg := fmt.Sprintf("dialing %s failed - %s", *graphiteAddress, err)
 		return errors.New(errmsg)
@@ -195,6 +203,7 @@ func submit(deadline time.Time) error {
 	num += processCounters(&buffer, now)
 	num += processGauges(&buffer, now)
 	num += processTimers(&buffer, now, percentThreshold)
+	num += processSets(&buffer, now)
 	if num == 0 {
 		return nil
 	}
@@ -253,6 +262,21 @@ func processGauges(buffer *bytes.Buffer, now int64) int64 {
 		fmt.Fprintf(buffer, "%s %d %d\n", g, c, now)
 		trackedGauges[g] = c
 		num++
+	}
+	return num
+}
+
+func processSets(buffer *bytes.Buffer, now int64) int64 {
+	num := int64(len(sets))
+	for bucket, set := range sets {
+
+		uniqueSet := map[string]bool{}
+		for _, str := range set {
+			uniqueSet[str] = true
+		}
+
+		fmt.Fprintf(buffer, "%s %d %d\n", bucket, len(uniqueSet), now)
+		delete(sets, bucket)
 	}
 	return num
 }
@@ -400,6 +424,8 @@ func parseMessage(data []byte) []*Packet {
 			}
 
 			value = GaugeData{relative, negative, gaugeValue}
+		} else if mtypeStr[0] == 's' {
+			value = string(val)
 		} else {
 			value, err = strconv.ParseUint(string(val), 10, 64)
 			if err != nil {
