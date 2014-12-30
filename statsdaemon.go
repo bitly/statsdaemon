@@ -351,9 +351,7 @@ func parseMessage(data []byte) []*Packet {
 
 		index := bytes.IndexByte(input, ':')
 		if index < 0 {
-			if *debug {
-				log.Printf("ERROR: failed to parse line: %s\n", string(line))
-			}
+			log.Printf("WARNING: failed to parse line: %s\n", line)
 			continue
 		}
 
@@ -364,9 +362,7 @@ func parseMessage(data []byte) []*Packet {
 
 		index = bytes.IndexByte(input, '|')
 		if index < 0 {
-			if *debug {
-				log.Printf("ERROR: failed to parse line: %s\n", string(line))
-			}
+			log.Printf("WARNING: failed to parse line: %s\n", line)
 			continue
 		}
 
@@ -378,9 +374,7 @@ func parseMessage(data []byte) []*Packet {
 		if input[index] == 'm' {
 			index++
 			if index >= len(input) || input[index] != 's' {
-				if *debug {
-					log.Printf("ERROR: failed to parse line: %s\n", string(line))
-				}
+				log.Printf("WARNING: failed to parse line: %s\n", line)
 				continue
 			}
 			mtypeStr = "ms"
@@ -399,7 +393,7 @@ func parseMessage(data []byte) []*Packet {
 		if mtypeStr[0] == 'c' {
 			value, err = strconv.ParseInt(string(val), 10, 64)
 			if err != nil {
-				log.Printf("ERROR: failed to ParseInt %s - %s", string(val), err)
+				log.Printf("WARNING: failed to ParseInt %s - %s", val, err)
 				continue
 			}
 		} else if mtypeStr[0] == 'g' {
@@ -419,7 +413,7 @@ func parseMessage(data []byte) []*Packet {
 
 			gaugeValue, err := strconv.ParseUint(stringToParse, 10, 64)
 			if err != nil {
-				log.Printf("ERROR: failed to ParseUint %s - %s", string(val), err)
+				log.Printf("WARNING: failed to ParseUint %s - %s", val, err)
 				continue
 			}
 
@@ -429,7 +423,7 @@ func parseMessage(data []byte) []*Packet {
 		} else {
 			value, err = strconv.ParseUint(string(val), 10, 64)
 			if err != nil {
-				log.Printf("ERROR: failed to ParseUint %s - %s", string(val), err)
+				log.Printf("WARNING: failed to ParseUint %s - %s", val, err)
 				continue
 			}
 		}
