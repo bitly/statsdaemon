@@ -350,7 +350,7 @@ func parseMessage(data []byte) []*Packet {
 		input = line
 
 		index := bytes.IndexByte(input, ':')
-		if index < 0 {
+		if index < 0 || index == len(input) - 1 {
 			if *debug {
 				log.Printf("ERROR: failed to parse line: %s\n", string(line))
 			}
@@ -363,7 +363,7 @@ func parseMessage(data []byte) []*Packet {
 		input = input[index:]
 
 		index = bytes.IndexByte(input, '|')
-		if index < 0 {
+		if index < 0 || index == len(input) - 1 {
 			if *debug {
 				log.Printf("ERROR: failed to parse line: %s\n", string(line))
 			}

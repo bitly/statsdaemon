@@ -180,6 +180,12 @@ func TestPacketParseMisc(t *testing.T) {
 	d = []byte("deploys.test.myservice4:100|t")
 	packets = parseMessage(d)
 	packetHandler(packets[0])
+
+	d = []byte("up-to-colon:")
+	packets = parseMessage(d)
+
+	d = []byte("up-to-pipe:1|")
+	packets = parseMessage(d)
 }
 
 func TestReceiveCounterPacketHandling(t *testing.T) {
