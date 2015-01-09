@@ -67,6 +67,7 @@ func (a *Percentiles) String() string {
 
 var (
 	serviceAddress   = flag.String("address", ":8125", "UDP service address")
+	maxUdpPacketSize = flag.Int64("max-udp-packet-size", 512, "Maximum UDP packet size")
 	graphiteAddress  = flag.String("graphite", "127.0.0.1:2003", "Graphite service address (or - to disable)")
 	flushInterval    = flag.Int64("flush-interval", 10, "Flush interval (seconds)")
 	debug            = flag.Bool("debug", false, "print statistics sent to graphite")
@@ -464,7 +465,7 @@ func udpListener() {
 	}
 	defer listener.Close()
 
-	message := make([]byte, MAX_UDP_PACKET_SIZE)
+	message := make([]byte, *maxUdpPacketSize)
 	for {
 		n, remaddr, err := listener.ReadFromUDP(message)
 		if err != nil {
