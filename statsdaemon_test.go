@@ -17,7 +17,7 @@ var commonPercentiles = Percentiles{
 	},
 }
 
-func TestPacketParseGauge(t *testing.T) {
+func TestParseMessageGauge(t *testing.T) {
 	d := []byte("gaugor:333|g")
 	packets := parseMessage(d)
 	assert.Equal(t, len(packets), 1)
@@ -56,7 +56,7 @@ func TestPacketParseGauge(t *testing.T) {
 	assert.Equal(t, float32(1), packet.Sampling)
 }
 
-func TestPacketParseCount(t *testing.T) {
+func TestParseMessageCount(t *testing.T) {
 	d := []byte("gorets:2|c|@0.1")
 	packets := parseMessage(d)
 	assert.Equal(t, len(packets), 1)
@@ -85,7 +85,7 @@ func TestPacketParseCount(t *testing.T) {
 	assert.Equal(t, float32(1), packet.Sampling)
 }
 
-func TestPacketParseTimer(t *testing.T) {
+func TestParseMessageTimer(t *testing.T) {
 	d := []byte("glork:320|ms")
 	packets := parseMessage(d)
 	assert.Equal(t, len(packets), 1)
@@ -96,7 +96,7 @@ func TestPacketParseTimer(t *testing.T) {
 	assert.Equal(t, float32(1), packet.Sampling)
 }
 
-func TestPacketParseSet(t *testing.T) {
+func TestParseMessageSet(t *testing.T) {
 	d := []byte("uniques:765|s")
 	packets := parseMessage(d)
 	assert.Equal(t, len(packets), 1)
@@ -107,7 +107,7 @@ func TestPacketParseSet(t *testing.T) {
 	assert.Equal(t, float32(1), packet.Sampling)
 }
 
-func TestPacketParseMisc(t *testing.T) {
+func TestParseMessageMisc(t *testing.T) {
 	d := []byte("a.key.with-0.dash:4|c")
 	packets := parseMessage(d)
 	assert.Equal(t, len(packets), 1)
@@ -177,18 +177,21 @@ func TestPacketParseMisc(t *testing.T) {
 	assert.Equal(t, len(packets), 0)
 
 	// reported as issue #45
+	// !!! FIXME this should really be rejected by parseMessage()
 	d = []byte("deploys.test.myservice4:100|t")
 	packets = parseMessage(d)
 	packetHandler(packets[0])
 
 	d = []byte("up-to-colon:")
 	packets = parseMessage(d)
+	assert.Equal(t, len(packets), 0)
 
 	d = []byte("up-to-pipe:1|")
 	packets = parseMessage(d)
+	assert.Equal(t, len(packets), 0)
 }
 
-func TestReceiveCounterPacketHandling(t *testing.T) {
+func TestPacketHandlerReceiveCounter(t *testing.T) {
 	counters = make(map[string]int64)
 	*receiveCounter = "countme"
 
@@ -205,7 +208,7 @@ func TestReceiveCounterPacketHandling(t *testing.T) {
 	assert.Equal(t, counters["countme"], int64(2))
 }
 
-func TestCountPacketHandling(t *testing.T) {
+func TestPacketHandlerCount(t *testing.T) {
 	counters = make(map[string]int64)
 
 	p := &Packet{
@@ -230,7 +233,7 @@ func TestCountPacketHandling(t *testing.T) {
 	assert.Equal(t, counters["gorets"], int64(-1))
 }
 
-func TestGaugePacketHandling(t *testing.T) {
+func TestPacketHandlerGauge(t *testing.T) {
 	gauges = make(map[string]uint64)
 
 	p := &Packet{
@@ -267,7 +270,7 @@ func TestGaugePacketHandling(t *testing.T) {
 	assert.Equal(t, gauges["gaugor"], uint64(math.MaxUint64))
 }
 
-func TestTimerPacketHandling(t *testing.T) {
+func TestPacketHandlerTimer(t *testing.T) {
 	timers = make(map[string]Uint64Slice)
 
 	p := &Packet{
@@ -286,7 +289,7 @@ func TestTimerPacketHandling(t *testing.T) {
 	assert.Equal(t, timers["glork"][1], uint64(100))
 }
 
-func TestSetPacketHandling(t *testing.T) {
+func TestPacketHandlerSet(t *testing.T) {
 	sets = make(map[string][]string)
 
 	p := &Packet{
