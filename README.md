@@ -29,8 +29,9 @@ Usage of ./statsdaemon:
   -debug=false: print statistics sent to graphite
   -flush-interval=10: Flush interval (seconds)
   -graphite="127.0.0.1:2003": Graphite service address (or - to disable)
-  -percent-threshold=[]: Threshold percent (0-100, may be given multiple times)
-  -persist-count-keys=60: number of flush-interval's to persist count keys
-  -receive-counter="": Metric name for total metrics recevied per interval
+  -percent-threshold=[]: percentile calculation for timers (0-100, may be given multiple times)
+  -persist-count-keys=60: number of flush-intervals to persist count keys
+  -prefix="": Prefix for all stats
+  -receive-counter="": Metric name for total metrics received per interval
   -version=false: print version string
 ```
