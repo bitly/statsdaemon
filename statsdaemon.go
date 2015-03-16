@@ -75,6 +75,7 @@ var (
 	receiveCounter   = flag.String("receive-counter", "", "Metric name for total metrics received per interval")
 	percentThreshold = Percentiles{}
 	prefix           = flag.String("prefix", "", "Prefix for all stats")
+	deleteGauges     = flag.Bool("delete-gauges", true, "don't send unchanged gauge values on flush")
 )
 
 func init() {
@@ -256,7 +257,7 @@ func processGauges(buffer *bytes.Buffer, now int64) int64 {
 	for g, c := range gauges {
 		lastValue, ok := trackedGauges[g]
 
-		if ok && c == lastValue {
+		if ok && *deleteGauges && c == lastValue {
 			continue
 		}
 		fmt.Fprintf(buffer, "%s %d %d\n", g, c, now)
