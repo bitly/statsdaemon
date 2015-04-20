@@ -75,6 +75,7 @@ var (
 	receiveCounter   = flag.String("receive-counter", "", "Metric name for total metrics received per interval")
 	percentThreshold = Percentiles{}
 	prefix           = flag.String("prefix", "", "Prefix for all stats")
+	postfix          = flag.String("postfix", "", "Postfix for all stats")
 )
 
 func init() {
@@ -232,14 +233,14 @@ func processCounters(buffer *bytes.Buffer, now int64) int64 {
 	var num int64
 	// continue sending zeros for counters for a short period of time even if we have no new data
 	for bucket, value := range counters {
-		fmt.Fprintf(buffer, "%s %d %d\n", bucket, value, now)
+		fmt.Fprintf(buffer, "%s%s %d %d\n", bucket, *postfix, value, now)
 		delete(counters, bucket)
 		countInactivity[bucket] = 0
 		num++
 	}
 	for bucket, purgeCount := range countInactivity {
 		if purgeCount > 0 {
-			fmt.Fprintf(buffer, "%s %d %d\n", bucket, 0, now)
+			fmt.Fprintf(buffer, "%s%s %d %d\n", bucket, *postfix, 0, now)
 			num++
 		}
 		countInactivity[bucket] += 1
@@ -259,7 +260,7 @@ func processGauges(buffer *bytes.Buffer, now int64) int64 {
 		if ok && c == lastValue {
 			continue
 		}
-		fmt.Fprintf(buffer, "%s %d %d\n", g, c, now)
+		fmt.Fprintf(buffer, "%s%s %d %d\n", g, *postfix, c, now)
 		trackedGauges[g] = c
 		num++
 	}
@@ -275,7 +276,7 @@ func processSets(buffer *bytes.Buffer, now int64) int64 {
 			uniqueSet[str] = true
 		}
 
-		fmt.Fprintf(buffer, "%s %d %d\n", bucket, len(uniqueSet), now)
+		fmt.Fprintf(buffer, "%s%s %d %d\n", bucket, *postfix, len(uniqueSet), now)
 		delete(sets, bucket)
 	}
 	return num
@@ -318,19 +319,19 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 			var tmpl string
 			var pctstr string
 			if pct.float >= 0 {
-				tmpl = "%s.upper_%s %d %d\n"
+				tmpl = "%s.upper_%s%s %d %d\n"
 				pctstr = pct.str
 			} else {
-				tmpl = "%s.lower_%s %d %d\n"
+				tmpl = "%s.lower_%s%s %d %d\n"
 				pctstr = pct.str[1:]
 			}
-			fmt.Fprintf(buffer, tmpl, u, pctstr, maxAtThreshold, now)
+			fmt.Fprintf(buffer, tmpl, u, pctstr, *postfix, maxAtThreshold, now)
 		}
 
-		fmt.Fprintf(buffer, "%s.mean %f %d\n", u, mean, now)
-		fmt.Fprintf(buffer, "%s.upper %d %d\n", u, max, now)
-		fmt.Fprintf(buffer, "%s.lower %d %d\n", u, min, now)
-		fmt.Fprintf(buffer, "%s.count %d %d\n", u, count, now)
+		fmt.Fprintf(buffer, "%s.mean%s %f %d\n", u, *postfix, mean, now)
+		fmt.Fprintf(buffer, "%s.upper%s %d %d\n", u, *postfix, max, now)
+		fmt.Fprintf(buffer, "%s.lower%s %d %d\n", u, *postfix, min, now)
+		fmt.Fprintf(buffer, "%s.count%s %d %d\n", u, *postfix, count, now)
 
 		delete(timers, u)
 	}
@@ -350,7 +351,7 @@ func parseMessage(data []byte) []*Packet {
 		input = line
 
 		index := bytes.IndexByte(input, ':')
-		if index < 0 || index == len(input) - 1 {
+		if index < 0 || index == len(input)-1 {
 			if *debug {
 				log.Printf("ERROR: failed to parse line: %s\n", string(line))
 			}
@@ -363,7 +364,7 @@ func parseMessage(data []byte) []*Packet {
 		input = input[index:]
 
 		index = bytes.IndexByte(input, '|')
-		if index < 0 || index == len(input) - 1 {
+		if index < 0 || index == len(input)-1 {
 			if *debug {
 				log.Printf("ERROR: failed to parse line: %s\n", string(line))
 			}
