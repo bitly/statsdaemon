@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -66,6 +67,19 @@ func (a *Percentiles) String() string {
 }
 
 var (
+	sanitizeFilter1 = regexp.MustCompile(`\s+`)
+	sanitizeFilter2 = regexp.MustCompile(`\/`)
+	sanitizeFilter3 = regexp.MustCompile(`[^a-zA-Z_\-0-9\.]`)
+)
+
+func sanitizeBucket(bucket string) string {
+	bucket = sanitizeFilter1.ReplaceAllString(bucket, "_")
+	bucket = sanitizeFilter2.ReplaceAllString(bucket, "-")
+	bucket = sanitizeFilter3.ReplaceAllString(bucket, "")
+	return bucket
+}
+
+var (
 	serviceAddress   = flag.String("address", ":8125", "UDP service address")
 	graphiteAddress  = flag.String("graphite", "127.0.0.1:2003", "Graphite service address (or - to disable)")
 	flushInterval    = flag.Int64("flush-interval", 10, "Flush interval (seconds)")
@@ -98,7 +112,7 @@ func monitor() {
 	for {
 		select {
 		case sig := <-signalchan:
-			fmt.Printf("!! Caught signal %d... shutting down\n", sig)
+			fmt.Printf("!! Caught signal %v... shutting down\n", sig)
 			if err := submit(time.Now().Add(period)); err != nil {
 				log.Printf("ERROR: %s", err)
 			}
@@ -196,8 +210,7 @@ func submit(deadline time.Time) error {
 
 	err = client.SetDeadline(deadline)
 	if err != nil {
-		errmsg := fmt.Sprintf("could not set deadline:", err)
-		return errors.New(errmsg)
+		return err
 	}
 
 	num += processCounters(&buffer, now)
@@ -350,7 +363,7 @@ func parseMessage(data []byte) []*Packet {
 		input = line
 
 		index := bytes.IndexByte(input, ':')
-		if index < 0 || index == len(input) - 1 {
+		if index < 0 || index == len(input)-1 {
 			if *debug {
 				log.Printf("ERROR: failed to parse line: %s\n", string(line))
 			}
@@ -363,7 +376,7 @@ func parseMessage(data []byte) []*Packet {
 		input = input[index:]
 
 		index = bytes.IndexByte(input, '|')
-		if index < 0 || index == len(input) - 1 {
+		if index < 0 || index == len(input)-1 {
 			if *debug {
 				log.Printf("ERROR: failed to parse line: %s\n", string(line))
 			}
@@ -445,7 +458,7 @@ func parseMessage(data []byte) []*Packet {
 		}
 
 		packet := &Packet{
-			Bucket:   *prefix + string(name),
+			Bucket:   sanitizeBucket(*prefix + string(name)),
 			Value:    value,
 			Modifier: mtypeStr,
 			Sampling: sampleRate,
