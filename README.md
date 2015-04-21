@@ -31,6 +31,7 @@ Usage of ./statsdaemon:
   -graphite="127.0.0.1:2003": Graphite service address (or - to disable)
   -percent-threshold=[]: percentile calculation for timers (0-100, may be given multiple times)
   -persist-count-keys=60: number of flush-intervals to persist count keys
+  -postfix="": Postfix for all stats
   -prefix="": Prefix for all stats
   -receive-counter="": Metric name for total metrics received per interval
   -version=false: print version string
