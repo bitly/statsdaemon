@@ -117,6 +117,33 @@ func TestParseMessageMisc(t *testing.T) {
 	assert.Equal(t, "c", packet.Modifier)
 	assert.Equal(t, float32(1), packet.Sampling)
 
+	d = []byte("a.key.with 0.space:4|c")
+	packets = parseMessage(d)
+	assert.Equal(t, len(packets), 1)
+	packet = packets[0]
+	assert.Equal(t, "a.key.with_0.space", packet.Bucket)
+	assert.Equal(t, int64(4), packet.Value.(int64))
+	assert.Equal(t, "c", packet.Modifier)
+	assert.Equal(t, float32(1), packet.Sampling)
+
+	d = []byte("a.key.with/0.slash:4|c")
+	packets = parseMessage(d)
+	assert.Equal(t, len(packets), 1)
+	packet = packets[0]
+	assert.Equal(t, "a.key.with-0.slash", packet.Bucket)
+	assert.Equal(t, int64(4), packet.Value.(int64))
+	assert.Equal(t, "c", packet.Modifier)
+	assert.Equal(t, float32(1), packet.Sampling)
+
+	d = []byte("a.key.with@#*&%$^_0.garbage:4|c")
+	packets = parseMessage(d)
+	assert.Equal(t, len(packets), 1)
+	packet = packets[0]
+	assert.Equal(t, "a.key.with_0.garbage", packet.Bucket)
+	assert.Equal(t, int64(4), packet.Value.(int64))
+	assert.Equal(t, "c", packet.Modifier)
+	assert.Equal(t, float32(1), packet.Sampling)
+
 	d = []byte("a.key.with-0.dash:4|c\ngauge:3|g")
 	packets = parseMessage(d)
 	assert.Equal(t, len(packets), 2)
