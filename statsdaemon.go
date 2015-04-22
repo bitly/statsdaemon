@@ -85,6 +85,7 @@ var (
 	flushInterval    = flag.Int64("flush-interval", 10, "Flush interval (seconds)")
 	debug            = flag.Bool("debug", false, "print statistics sent to graphite")
 	showVersion      = flag.Bool("version", false, "print version string")
+	deleteGauges     = flag.Bool("delete-gauges", true, "don't send values to graphite for inactive gauges, as opposed to sending the previous value")
 	persistCountKeys = flag.Int64("persist-count-keys", 60, "number of flush-intervals to persist count keys")
 	receiveCounter   = flag.String("receive-counter", "", "Metric name for total metrics received per interval")
 	percentThreshold = Percentiles{}
@@ -100,7 +101,7 @@ var (
 	In              = make(chan *Packet, MAX_UNPROCESSED_PACKETS)
 	counters        = make(map[string]int64)
 	gauges          = make(map[string]uint64)
-	trackedGauges   = make(map[string]uint64)
+	lastGaugeValue  = make(map[string]uint64)
 	timers          = make(map[string]Uint64Slice)
 	countInactivity = make(map[string]int64)
 	sets            = make(map[string][]string)
@@ -267,14 +268,26 @@ func processGauges(buffer *bytes.Buffer, now int64) int64 {
 	var num int64
 
 	for g, c := range gauges {
-		lastValue, ok := trackedGauges[g]
+		currentValue := c
+		lastValue, hasLastValue := lastGaugeValue[g]
+		var hasChanged bool
 
-		if ok && c == lastValue {
+		if c != math.MaxUint64 {
+			hasChanged = true
+		}
+
+		switch {
+		case hasChanged:
+			fmt.Fprintf(buffer, "%s %d %d\n", g, currentValue, now)
+			lastGaugeValue[g] = currentValue
+			gauges[g] = math.MaxUint64
+			num++
+		case hasLastValue && !hasChanged && !*deleteGauges:
+			fmt.Fprintf(buffer, "%s %d %d\n", g, lastValue, now)
+			num++
+		default:
 			continue
 		}
-		fmt.Fprintf(buffer, "%s %d %d\n", g, c, now)
-		trackedGauges[g] = c
-		num++
 	}
 	return num
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"github.com/bmizerany/assert"
 	"math"
 	"math/rand"
@@ -384,19 +385,49 @@ func TestProcessTimers(t *testing.T) {
 
 func TestProcessGauges(t *testing.T) {
 	// Some data with expected mean of 20
+	flag.Set("delete-gauges", "false")
 	gauges = make(map[string]uint64)
-	gauges["gaugor"] = 12345
+	gauges["gaugor"] = math.MaxUint64
 
 	now := int64(1418052649)
 
 	var buffer bytes.Buffer
 
 	num := processGauges(&buffer, now)
-	assert.Equal(t, num, int64(1))
-	assert.Equal(t, buffer.String(), "gaugor 12345 1418052649\n")
+	assert.Equal(t, num, int64(0))
+	assert.Equal(t, buffer.String(), "")
 
 	gauges["gaugor"] = 12345
 	num = processGauges(&buffer, now)
+	assert.Equal(t, num, int64(1))
+
+	gauges["gaugor"] = math.MaxUint64
+	num = processGauges(&buffer, now)
+	assert.Equal(t, buffer.String(), "gaugor 12345 1418052649\ngaugor 12345 1418052649\n")
+	assert.Equal(t, num, int64(1))
+}
+
+func TestProcessDeleteGauges(t *testing.T) {
+	// Some data with expected mean of 20
+	flag.Set("delete-gauges", "true")
+	gauges = make(map[string]uint64)
+	gauges["gaugordelete"] = math.MaxUint64
+
+	now := int64(1418052649)
+
+	var buffer bytes.Buffer
+
+	num := processGauges(&buffer, now)
+	assert.Equal(t, num, int64(0))
+	assert.Equal(t, buffer.String(), "")
+
+	gauges["gaugordelete"] = 12345
+	num = processGauges(&buffer, now)
+	assert.Equal(t, num, int64(1))
+
+	gauges["gaugordelete"] = math.MaxUint64
+	num = processGauges(&buffer, now)
+	assert.Equal(t, buffer.String(), "gaugordelete 12345 1418052649\n")
 	assert.Equal(t, num, int64(0))
 }
 
