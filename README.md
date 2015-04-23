@@ -1,7 +1,7 @@
 statsdaemon
 ==========
 
-Port of Etsy's statsd (https://github.com/etsy/statsd), written in Go (originally based 
+Port of Etsy's statsd (https://github.com/etsy/statsd), written in Go (originally based
 on [amir/gographite](https://github.com/amir/gographite)).
 
 Supports
@@ -26,13 +26,14 @@ Command Line Options
 ```
 Usage of ./statsdaemon:
   -address=":8125": UDP service address
-  -max-udp-packet-size=512: Maximum udp packet size
+  -max-udp-packet-size=1472: Maximum udp packet size
   -debug=false: print statistics sent to graphite
   -flush-interval=10: Flush interval (seconds)
   -graphite="127.0.0.1:2003": Graphite service address (or - to disable)
   -percent-threshold=[]: percentile calculation for timers (0-100, may be given multiple times)
   -persist-count-keys=60: number of flush-intervals to persist count keys
   -prefix="": Prefix for all stats
+  -delete-gauges=true: don't send values to graphite for inactive gauges, as opposed to sending the previous value
   -receive-counter="": Metric name for total metrics received per interval
   -version=false: print version string
 ```

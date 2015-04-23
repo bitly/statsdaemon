@@ -21,7 +21,6 @@ import (
 
 const (
 	MAX_UNPROCESSED_PACKETS = 1000
-	MAX_UDP_PACKET_SIZE     = 512
 )
 
 var signalchan chan os.Signal
@@ -81,7 +80,7 @@ func sanitizeBucket(bucket string) string {
 
 var (
 	serviceAddress   = flag.String("address", ":8125", "UDP service address")
-	maxUdpPacketSize = flag.Int64("max-udp-packet-size", 512, "Maximum UDP packet size")
+	maxUdpPacketSize = flag.Int64("max-udp-packet-size", 1472, "Maximum UDP packet size")
 	graphiteAddress  = flag.String("graphite", "127.0.0.1:2003", "Graphite service address (or - to disable)")
 	flushInterval    = flag.Int64("flush-interval", 10, "Flush interval (seconds)")
 	debug            = flag.Bool("debug", false, "print statistics sent to graphite")
