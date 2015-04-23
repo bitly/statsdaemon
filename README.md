@@ -26,6 +26,7 @@ Command Line Options
 ```
 Usage of ./statsdaemon:
   -address=":8125": UDP service address
+  -max-udp-packet-size=512: Maximum udp packet size
   -debug=false: print statistics sent to graphite
   -flush-interval=10: Flush interval (seconds)
   -graphite="127.0.0.1:2003": Graphite service address (or - to disable)
