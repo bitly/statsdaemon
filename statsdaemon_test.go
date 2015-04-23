@@ -145,6 +145,28 @@ func TestParseMessageMisc(t *testing.T) {
 	assert.Equal(t, "c", packet.Modifier)
 	assert.Equal(t, float32(1), packet.Sampling)
 
+	flag.Set("prefix", "test.")
+	d = []byte("prefix:4|c")
+	packets = parseMessage(d)
+	assert.Equal(t, len(packets), 1)
+	packet = packets[0]
+	assert.Equal(t, "test.prefix", packet.Bucket)
+	assert.Equal(t, int64(4), packet.Value.(int64))
+	assert.Equal(t, "c", packet.Modifier)
+	assert.Equal(t, float32(1), packet.Sampling)
+	flag.Set("prefix", "")
+
+	flag.Set("postfix", ".test")
+	d = []byte("postfix:4|c")
+	packets = parseMessage(d)
+	assert.Equal(t, len(packets), 1)
+	packet = packets[0]
+	assert.Equal(t, "postfix.test", packet.Bucket)
+	assert.Equal(t, int64(4), packet.Value.(int64))
+	assert.Equal(t, "c", packet.Modifier)
+	assert.Equal(t, float32(1), packet.Sampling)
+	flag.Set("postfix", "")
+
 	d = []byte("a.key.with-0.dash:4|c\ngauge:3|g")
 	packets = parseMessage(d)
 	assert.Equal(t, len(packets), 2)

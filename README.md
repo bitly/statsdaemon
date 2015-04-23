@@ -33,6 +33,7 @@ Usage of ./statsdaemon:
   -percent-threshold=[]: percentile calculation for timers (0-100, may be given multiple times)
   -persist-count-keys=60: number of flush-intervals to persist count keys
   -prefix="": Prefix for all stats
+  -postfix="": Postfix for all stats
   -delete-gauges=true: don't send values to graphite for inactive gauges, as opposed to sending the previous value
   -receive-counter="": Metric name for total metrics received per interval
   -version=false: print version string
