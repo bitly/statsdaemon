@@ -90,6 +90,7 @@ var (
 	receiveCounter   = flag.String("receive-counter", "", "Metric name for total metrics received per interval")
 	percentThreshold = Percentiles{}
 	prefix           = flag.String("prefix", "", "Prefix for all stats")
+	postfix          = flag.String("postfix", "", "Postfix for all stats")
 )
 
 func init() {
@@ -471,7 +472,7 @@ func parseMessage(data []byte) []*Packet {
 		}
 
 		packet := &Packet{
-			Bucket:   sanitizeBucket(*prefix + string(name)),
+			Bucket:   sanitizeBucket(*prefix + string(name) + *postfix),
 			Value:    value,
 			Modifier: mtypeStr,
 			Sampling: sampleRate,
