@@ -499,6 +499,29 @@ func TestProcessTimersUpperPercentile(t *testing.T) {
 	assert.Equal(t, string(lines[0]), "response_time.upper_75 2 1418052649")
 }
 
+func TestProcessTimersUpperPercentilePostfix(t *testing.T) {
+	flag.Set("postfix", ".test")
+	// Some data with expected 75% of 2
+	timers = make(map[string]Uint64Slice)
+	timers["postfix_response_time.test"] = []uint64{0, 1, 2, 3}
+
+	now := int64(1418052649)
+
+	var buffer bytes.Buffer
+	num := processTimers(&buffer, now, Percentiles{
+		&Percentile{
+			75,
+			"75",
+		},
+	})
+
+	lines := bytes.Split(buffer.Bytes(), []byte("\n"))
+
+	assert.Equal(t, num, int64(1))
+	assert.Equal(t, string(lines[0]), "postfix_response_time.upper_75.test 2 1418052649")
+	flag.Set("postfix", "")
+}
+
 func TestProcessTimesLowerPercentile(t *testing.T) {
 	timers = make(map[string]Uint64Slice)
 	timers["time"] = []uint64{0, 1, 2, 3}
