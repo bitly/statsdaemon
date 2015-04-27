@@ -268,23 +268,23 @@ func processCounters(buffer *bytes.Buffer, now int64) int64 {
 func processGauges(buffer *bytes.Buffer, now int64) int64 {
 	var num int64
 
-	for g, c := range gauges {
-		currentValue := c
-		lastValue, hasLastValue := lastGaugeValue[g]
+	for bucket, gauge := range gauges {
+		currentValue := gauge
+		lastValue, hasLastValue := lastGaugeValue[bucket]
 		var hasChanged bool
 
-		if c != math.MaxUint64 {
+		if gauge != math.MaxUint64 {
 			hasChanged = true
 		}
 
 		switch {
 		case hasChanged:
-			fmt.Fprintf(buffer, "%s %d %d\n", g, currentValue, now)
-			lastGaugeValue[g] = currentValue
-			gauges[g] = math.MaxUint64
+			fmt.Fprintf(buffer, "%s %d %d\n", bucket, currentValue, now)
+			lastGaugeValue[bucket] = currentValue
+			gauges[bucket] = math.MaxUint64
 			num++
 		case hasLastValue && !hasChanged && !*deleteGauges:
-			fmt.Fprintf(buffer, "%s %d %d\n", g, lastValue, now)
+			fmt.Fprintf(buffer, "%s %d %d\n", bucket, lastValue, now)
 			num++
 		default:
 			continue
@@ -310,23 +310,24 @@ func processSets(buffer *bytes.Buffer, now int64) int64 {
 
 func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 	var num int64
-	for u, t := range timers {
+	for bucket, timer := range timers {
+		bucketWithoutPostfix := bucket[:len(bucket)-len(*postfix)]
 		num++
 
-		sort.Sort(t)
-		min := t[0]
-		max := t[len(t)-1]
+		sort.Sort(timer)
+		min := timer[0]
+		max := timer[len(timer)-1]
 		maxAtThreshold := max
-		count := len(t)
+		count := len(timer)
 
 		sum := uint64(0)
-		for _, value := range t {
+		for _, value := range timer {
 			sum += value
 		}
-		mean := float64(sum) / float64(len(t))
+		mean := float64(sum) / float64(len(timer))
 
 		for _, pct := range pctls {
-			if len(t) > 1 {
+			if len(timer) > 1 {
 				var abs float64
 				if pct.float >= 0 {
 					abs = pct.float
@@ -339,27 +340,27 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 				if pct.float >= 0 {
 					indexOfPerc -= 1 // index offset=0
 				}
-				maxAtThreshold = t[indexOfPerc]
+				maxAtThreshold = timer[indexOfPerc]
 			}
 
 			var tmpl string
 			var pctstr string
 			if pct.float >= 0 {
-				tmpl = "%s.upper_%s %d %d\n"
+				tmpl = "%s.upper_%s%s %d %d\n"
 				pctstr = pct.str
 			} else {
-				tmpl = "%s.lower_%s %d %d\n"
+				tmpl = "%s.lower_%s%s %d %d\n"
 				pctstr = pct.str[1:]
 			}
-			fmt.Fprintf(buffer, tmpl, u, pctstr, maxAtThreshold, now)
+			fmt.Fprintf(buffer, tmpl, bucketWithoutPostfix, pctstr, *postfix, maxAtThreshold, now)
 		}
 
-		fmt.Fprintf(buffer, "%s.mean %f %d\n", u, mean, now)
-		fmt.Fprintf(buffer, "%s.upper %d %d\n", u, max, now)
-		fmt.Fprintf(buffer, "%s.lower %d %d\n", u, min, now)
-		fmt.Fprintf(buffer, "%s.count %d %d\n", u, count, now)
+		fmt.Fprintf(buffer, "%s.mean%s %f %d\n", bucketWithoutPostfix, *postfix, mean, now)
+		fmt.Fprintf(buffer, "%s.upper%s %d %d\n", bucketWithoutPostfix, *postfix, max, now)
+		fmt.Fprintf(buffer, "%s.lower%s %d %d\n", bucketWithoutPostfix, *postfix, min, now)
+		fmt.Fprintf(buffer, "%s.count%s %d %d\n", bucketWithoutPostfix, *postfix, count, now)
 
-		delete(timers, u)
+		delete(timers, bucket)
 	}
 	return num
 }
