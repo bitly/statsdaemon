@@ -11,7 +11,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -67,17 +66,25 @@ func (a *Percentiles) String() string {
 	return fmt.Sprintf("%v", *a)
 }
 
-var (
-	sanitizeFilter1 = regexp.MustCompile(`\s+`)
-	sanitizeFilter2 = regexp.MustCompile(`\/`)
-	sanitizeFilter3 = regexp.MustCompile(`[^a-zA-Z_\-0-9\.]`)
-)
-
 func sanitizeBucket(bucket string) string {
-	bucket = sanitizeFilter1.ReplaceAllString(bucket, "_")
-	bucket = sanitizeFilter2.ReplaceAllString(bucket, "-")
-	bucket = sanitizeFilter3.ReplaceAllString(bucket, "")
-	return bucket
+	b := make([]byte, len(bucket))
+	var bl int
+
+	for i := 0; i < len(bucket); i++ {
+		c := bucket[i]
+		switch {
+		case (c >= byte('a') && c <= byte('z')) || (c >= byte('A') && c <= byte('Z')) || (c >= byte('0') && c <= byte('9')) || c == byte('-') || c == byte('.') || c == byte('_'):
+			b[bl] = c
+			bl++
+		case c == byte(' '):
+			b[bl] = byte('_')
+			bl++
+		case c == byte('/'):
+			b[bl] = byte('-')
+			bl++
+		}
+	}
+	return string(b[:bl])
 }
 
 var (
