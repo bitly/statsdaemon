@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"net"
@@ -21,6 +22,7 @@ import (
 
 const (
 	MAX_UNPROCESSED_PACKETS = 1000
+	READ_SIZE               = 4096
 )
 
 var signalchan chan os.Signal
@@ -79,18 +81,19 @@ func sanitizeBucket(bucket string) string {
 }
 
 var (
-	serviceAddress   = flag.String("address", ":8125", "UDP service address")
-	maxUdpPacketSize = flag.Int64("max-udp-packet-size", 1472, "Maximum UDP packet size")
-	graphiteAddress  = flag.String("graphite", "127.0.0.1:2003", "Graphite service address (or - to disable)")
-	flushInterval    = flag.Int64("flush-interval", 10, "Flush interval (seconds)")
-	debug            = flag.Bool("debug", false, "print statistics sent to graphite")
-	showVersion      = flag.Bool("version", false, "print version string")
-	deleteGauges     = flag.Bool("delete-gauges", true, "don't send values to graphite for inactive gauges, as opposed to sending the previous value")
-	persistCountKeys = flag.Int64("persist-count-keys", 60, "number of flush-intervals to persist count keys")
-	receiveCounter   = flag.String("receive-counter", "", "Metric name for total metrics received per interval")
-	percentThreshold = Percentiles{}
-	prefix           = flag.String("prefix", "", "Prefix for all stats")
-	postfix          = flag.String("postfix", "", "Postfix for all stats")
+	serviceAddress    = flag.String("address", ":8125", "UDP service address")
+	tcpServiceAddress = flag.String("tcpaddr", "", "TCP service address, if set")
+	maxUdpPacketSize  = flag.Int64("max-udp-packet-size", 1472, "Maximum UDP packet size")
+	graphiteAddress   = flag.String("graphite", "127.0.0.1:2003", "Graphite service address (or - to disable)")
+	flushInterval     = flag.Int64("flush-interval", 10, "Flush interval (seconds)")
+	debug             = flag.Bool("debug", false, "print statistics sent to graphite")
+	showVersion       = flag.Bool("version", false, "print version string")
+	deleteGauges      = flag.Bool("delete-gauges", true, "don't send values to graphite for inactive gauges, as opposed to sending the previous value")
+	persistCountKeys  = flag.Int64("persist-count-keys", 60, "number of flush-intervals to persist count keys")
+	receiveCounter    = flag.String("receive-counter", "", "Metric name for total metrics received per interval")
+	percentThreshold  = Percentiles{}
+	prefix            = flag.String("prefix", "", "Prefix for all stats")
+	postfix           = flag.String("postfix", "", "Postfix for all stats")
 )
 
 func init() {
@@ -365,122 +368,205 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 	return num
 }
 
-func parseMessage(data []byte) []*Packet {
+type MsgParser struct {
+	reader       io.Reader
+	buffer       []byte
+	partialReads bool
+	done         bool
+}
+
+func NewParser(reader io.Reader, partialReads bool) *MsgParser {
+	return &MsgParser{reader, []byte{}, partialReads, false}
+}
+
+func (mp *MsgParser) Next() (*Packet, bool) {
+	buf := mp.buffer
+
+	for {
+		line, rest := mp.lineFrom(buf)
+
+		if line != nil {
+			mp.buffer = rest
+			return parseLine(line), true
+		}
+
+		if mp.done {
+			return parseLine(rest), false
+		}
+
+		idx := len(buf)
+		end := idx + READ_SIZE
+		if cap(buf) >= end {
+			buf = buf[:end]
+		} else {
+			tmp := buf
+			buf = make([]byte, end)
+			copy(buf, tmp)
+		}
+
+		n, err := mp.reader.Read(buf[idx:])
+		buf = buf[:idx+n]
+		if err != nil {
+			if err != io.EOF {
+				log.Printf("ERROR: %s", err)
+			}
+
+			mp.done = true
+
+			line, rest = mp.lineFrom(buf)
+			if line != nil {
+				mp.buffer = rest
+				return parseLine(line), len(rest) > 0
+			}
+
+			if len(rest) > 0 {
+				return parseLine(rest), false
+			}
+
+			return nil, false
+		}
+	}
+}
+
+func (mp *MsgParser) lineFrom(input []byte) ([]byte, []byte) {
+	split := bytes.SplitAfterN(input, []byte("\n"), 2)
+	if len(split) == 2 {
+		return split[0][:len(split[0])-1], split[1]
+	}
+
+	if !mp.partialReads {
+		if len(input) == 0 {
+			input = nil
+		}
+		return input, []byte{}
+	}
+
+	if bytes.HasSuffix(input, []byte("\n")) {
+		return input[:len(input)-1], []byte{}
+	}
+
+	return nil, input
+}
+
+func parseLine(line []byte) *Packet {
+	split := bytes.SplitN(line, []byte{'|'}, 3)
+	if len(split) < 2 {
+		logParseFail(line)
+		return nil
+	}
+
+	keyval := split[0]
+	typeCode := string(split[1])
+
+	sampling := float32(1)
+	if strings.HasPrefix(typeCode, "c") || strings.HasPrefix(typeCode, "ms") {
+		if len(split) == 3 && len(split[2]) > 0 && split[2][0] == '@' {
+			f64, err := strconv.ParseFloat(string(split[2][1:]), 32)
+			if err != nil {
+				log.Printf(
+					"ERROR: failed to ParseFloat %s - %s",
+					string(split[2][1:]),
+					err,
+				)
+				return nil
+			}
+			sampling = float32(f64)
+		}
+	}
+
+	split = bytes.SplitN(keyval, []byte{':'}, 2)
+	if len(split) < 2 {
+		logParseFail(line)
+		return nil
+	}
+	name := string(split[0])
+	val := split[1]
+	if len(val) == 0 {
+		logParseFail(line)
+		return nil
+	}
+
 	var (
-		output []*Packet
-		input  []byte
+		err   error
+		value interface{}
 	)
 
-	for _, line := range bytes.Split(data, []byte("\n")) {
-		if len(line) == 0 {
-			continue
+	switch typeCode {
+	case "c":
+		value, err = strconv.ParseInt(string(val), 10, 64)
+		if err != nil {
+			log.Printf("ERROR: failed to ParseInt %s - %s", string(val), err)
+			return nil
 		}
-		input = line
+	case "g":
+		var rel, neg bool
+		var s string
 
-		index := bytes.IndexByte(input, ':')
-		if index < 0 || index == len(input)-1 {
-			if *debug {
-				log.Printf("ERROR: failed to parse line: %s\n", string(line))
-			}
-			continue
-		}
-
-		name := input[:index]
-
-		index++
-		input = input[index:]
-
-		index = bytes.IndexByte(input, '|')
-		if index < 0 || index == len(input)-1 {
-			if *debug {
-				log.Printf("ERROR: failed to parse line: %s\n", string(line))
-			}
-			continue
-		}
-
-		val := input[:index]
-		index++
-
-		var mtypeStr string
-
-		if input[index] == 'm' {
-			index++
-			if index >= len(input) || input[index] != 's' {
-				if *debug {
-					log.Printf("ERROR: failed to parse line: %s\n", string(line))
-				}
-				continue
-			}
-			mtypeStr = "ms"
-		} else {
-			mtypeStr = string(input[index])
+		switch val[0] {
+		case '+':
+			rel = true
+			neg = false
+			s = string(val[1:])
+		case '-':
+			rel = true
+			neg = true
+			s = string(val[1:])
+		default:
+			rel = false
+			neg = false
+			s = string(val)
 		}
 
-		index++
-		input = input[index:]
-
-		var (
-			value interface{}
-			err   error
-		)
-
-		if mtypeStr[0] == 'c' {
-			value, err = strconv.ParseInt(string(val), 10, 64)
-			if err != nil {
-				log.Printf("ERROR: failed to ParseInt %s - %s", string(val), err)
-				continue
-			}
-		} else if mtypeStr[0] == 'g' {
-			var relative, negative bool
-			var stringToParse string
-
-			switch val[0] {
-			case '+', '-':
-				relative = true
-				negative = val[0] == '-'
-				stringToParse = string(val[1:])
-			default:
-				relative = false
-				negative = false
-				stringToParse = string(val)
-			}
-
-			gaugeValue, err := strconv.ParseUint(stringToParse, 10, 64)
-			if err != nil {
-				log.Printf("ERROR: failed to ParseUint %s - %s", string(val), err)
-				continue
-			}
-
-			value = GaugeData{relative, negative, gaugeValue}
-		} else if mtypeStr[0] == 's' {
-			value = string(val)
-		} else {
-			value, err = strconv.ParseUint(string(val), 10, 64)
-			if err != nil {
-				log.Printf("ERROR: failed to ParseUint %s - %s", string(val), err)
-				continue
-			}
+		value, err = strconv.ParseUint(s, 10, 64)
+		if err != nil {
+			log.Printf("ERROR: failed to ParseUint %s - %s", string(val), err)
+			return nil
 		}
 
-		var sampleRate float32 = 1
-
-		if len(input) > 0 && bytes.HasPrefix(input, []byte("|@")) {
-			input = input[2:]
-			rate, err := strconv.ParseFloat(string(input), 32)
-			if err == nil {
-				sampleRate = float32(rate)
-			}
+		value = GaugeData{rel, neg, value.(uint64)}
+	case "s":
+		value = string(val)
+	case "ms":
+		value, err = strconv.ParseUint(string(val), 10, 64)
+		if err != nil {
+			log.Printf("ERROR: failed to ParseUint %s - %s", string(val), err)
+			return nil
 		}
-
-		packet := &Packet{
-			Bucket:   sanitizeBucket(*prefix + string(name) + *postfix),
-			Value:    value,
-			Modifier: mtypeStr,
-			Sampling: sampleRate,
-		}
-		output = append(output, packet)
+	default:
+		log.Printf("ERROR: unrecognized type code %q", typeCode)
+		return nil
 	}
-	return output
+
+	return &Packet{
+		Bucket:   sanitizeBucket(*prefix + string(name) + *postfix),
+		Value:    value,
+		Modifier: typeCode,
+		Sampling: sampling,
+	}
+}
+
+func logParseFail(line []byte) {
+	if *debug {
+		log.Printf("ERROR: failed to parse line: %q\n", string(line))
+	}
+}
+
+func parseTo(conn io.ReadCloser, partialReads bool, out chan<- *Packet) {
+	defer conn.Close()
+
+	parser := NewParser(conn, partialReads)
+	for {
+		p, more := parser.Next()
+		if p == nil {
+			break
+		}
+
+		out <- p
+
+		if !more {
+			break
+		}
+	}
 }
 
 func udpListener() {
@@ -490,19 +576,25 @@ func udpListener() {
 	if err != nil {
 		log.Fatalf("ERROR: ListenUDP - %s", err)
 	}
+
+	parseTo(listener, false, In)
+}
+
+func tcpListener() {
+	address, _ := net.ResolveTCPAddr("tcp", *tcpServiceAddress)
+	log.Printf("listening on %s", address)
+	listener, err := net.ListenTCP("tcp", address)
+	if err != nil {
+		log.Fatalf("ERROR: ListenTCP - %s", err)
+	}
 	defer listener.Close()
 
-	message := make([]byte, *maxUdpPacketSize)
 	for {
-		n, remaddr, err := listener.ReadFromUDP(message)
+		conn, err := listener.AcceptTCP()
 		if err != nil {
-			log.Printf("ERROR: reading UDP packet from %+v - %s", remaddr, err)
-			continue
+			log.Fatalf("ERROR: AcceptTCP - %s", err)
 		}
-
-		for _, p := range parseMessage(message[:n]) {
-			In <- p
-		}
+		go parseTo(conn, true, In)
 	}
 }
 
@@ -518,5 +610,8 @@ func main() {
 	signal.Notify(signalchan, syscall.SIGTERM)
 
 	go udpListener()
+	if *tcpServiceAddress != "" {
+		go tcpListener()
+	}
 	monitor()
 }
