@@ -22,7 +22,7 @@ import (
 
 const (
 	MAX_UNPROCESSED_PACKETS = 1000
-	READ_SIZE               = 4096
+	TCP_READ_SIZE           = 4096
 )
 
 var signalchan chan os.Signal
@@ -395,7 +395,12 @@ func (mp *MsgParser) Next() (*Packet, bool) {
 		}
 
 		idx := len(buf)
-		end := idx + READ_SIZE
+		end := idx
+		if mp.partialReads {
+			end += TCP_READ_SIZE
+		} else {
+			end += int(*maxUdpPacketSize)
+		}
 		if cap(buf) >= end {
 			buf = buf[:end]
 		} else {
