@@ -3,12 +3,15 @@ package main
 import (
 	"bytes"
 	"flag"
-	"github.com/bmizerany/assert"
 	"math"
 	"math/rand"
+	"net"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/bmizerany/assert"
 )
 
 var commonPercentiles = Percentiles{
@@ -18,29 +21,26 @@ var commonPercentiles = Percentiles{
 	},
 }
 
-func TestParseMessageGauge(t *testing.T) {
+func TestParseLineGauge(t *testing.T) {
 	d := []byte("gaugor:333|g")
-	packets := parseMessage(d)
-	assert.Equal(t, len(packets), 1)
-	packet := packets[0]
+	packet := parseLine(d)
+	assert.NotEqual(t, packet, nil)
 	assert.Equal(t, "gaugor", packet.Bucket)
 	assert.Equal(t, GaugeData{false, false, 333}, packet.Value)
 	assert.Equal(t, "g", packet.Modifier)
 	assert.Equal(t, float32(1), packet.Sampling)
 
 	d = []byte("gaugor:-10|g")
-	packets = parseMessage(d)
-	assert.Equal(t, len(packets), 1)
-	packet = packets[0]
+	packet = parseLine(d)
+	assert.NotEqual(t, packet, nil)
 	assert.Equal(t, "gaugor", packet.Bucket)
 	assert.Equal(t, GaugeData{true, true, 10}, packet.Value)
 	assert.Equal(t, "g", packet.Modifier)
 	assert.Equal(t, float32(1), packet.Sampling)
 
 	d = []byte("gaugor:+4|g")
-	packets = parseMessage(d)
-	assert.Equal(t, len(packets), 1)
-	packet = packets[0]
+	packet = parseLine(d)
+	assert.NotEqual(t, packet, nil)
 	assert.Equal(t, "gaugor", packet.Bucket)
 	assert.Equal(t, GaugeData{true, false, 4}, packet.Value)
 	assert.Equal(t, "g", packet.Modifier)
@@ -48,98 +48,93 @@ func TestParseMessageGauge(t *testing.T) {
 
 	// >max(int64) && <max(uint64)
 	d = []byte("gaugor:18446744073709551606|g")
-	packets = parseMessage(d)
-	assert.Equal(t, len(packets), 1)
-	packet = packets[0]
+	packet = parseLine(d)
+	assert.NotEqual(t, packet, nil)
 	assert.Equal(t, "gaugor", packet.Bucket)
 	assert.Equal(t, GaugeData{false, false, 18446744073709551606}, packet.Value)
 	assert.Equal(t, "g", packet.Modifier)
 	assert.Equal(t, float32(1), packet.Sampling)
 }
 
-func TestParseMessageCount(t *testing.T) {
+func TestParseLineCount(t *testing.T) {
 	d := []byte("gorets:2|c|@0.1")
-	packets := parseMessage(d)
-	assert.Equal(t, len(packets), 1)
-	packet := packets[0]
+	packet := parseLine(d)
+	assert.NotEqual(t, packet, nil)
 	assert.Equal(t, "gorets", packet.Bucket)
 	assert.Equal(t, int64(2), packet.Value.(int64))
 	assert.Equal(t, "c", packet.Modifier)
 	assert.Equal(t, float32(0.1), packet.Sampling)
 
 	d = []byte("gorets:4|c")
-	packets = parseMessage(d)
-	assert.Equal(t, len(packets), 1)
-	packet = packets[0]
+	packet = parseLine(d)
+	assert.NotEqual(t, packet, nil)
 	assert.Equal(t, "gorets", packet.Bucket)
 	assert.Equal(t, int64(4), packet.Value.(int64))
 	assert.Equal(t, "c", packet.Modifier)
 	assert.Equal(t, float32(1), packet.Sampling)
 
 	d = []byte("gorets:-4|c")
-	packets = parseMessage(d)
-	assert.Equal(t, len(packets), 1)
-	packet = packets[0]
+	packet = parseLine(d)
+	assert.NotEqual(t, packet, nil)
 	assert.Equal(t, "gorets", packet.Bucket)
 	assert.Equal(t, int64(-4), packet.Value.(int64))
 	assert.Equal(t, "c", packet.Modifier)
 	assert.Equal(t, float32(1), packet.Sampling)
 }
 
-func TestParseMessageTimer(t *testing.T) {
+func TestParseLineTimer(t *testing.T) {
 	d := []byte("glork:320|ms")
-	packets := parseMessage(d)
-	assert.Equal(t, len(packets), 1)
-	packet := packets[0]
+	packet := parseLine(d)
+	assert.NotEqual(t, packet, nil)
 	assert.Equal(t, "glork", packet.Bucket)
 	assert.Equal(t, uint64(320), packet.Value.(uint64))
 	assert.Equal(t, "ms", packet.Modifier)
 	assert.Equal(t, float32(1), packet.Sampling)
+
+	d = []byte("glork:320|ms|@0.1")
+	packet = parseLine(d)
+	assert.NotEqual(t, packet, nil)
+	assert.Equal(t, "glork", packet.Bucket)
+	assert.Equal(t, uint64(320), packet.Value.(uint64))
+	assert.Equal(t, "ms", packet.Modifier)
+	assert.Equal(t, float32(0.1), packet.Sampling)
 }
 
-func TestParseMessageSet(t *testing.T) {
+func TestParseLineSet(t *testing.T) {
 	d := []byte("uniques:765|s")
-	packets := parseMessage(d)
-	assert.Equal(t, len(packets), 1)
-	packet := packets[0]
+	packet := parseLine(d)
+	assert.NotEqual(t, packet, nil)
 	assert.Equal(t, "uniques", packet.Bucket)
 	assert.Equal(t, "765", packet.Value)
 	assert.Equal(t, "s", packet.Modifier)
 	assert.Equal(t, float32(1), packet.Sampling)
 }
 
-func TestParseMessageMisc(t *testing.T) {
+func TestParseLineMisc(t *testing.T) {
 	d := []byte("a.key.with-0.dash:4|c")
-	packets := parseMessage(d)
-	assert.Equal(t, len(packets), 1)
-	packet := packets[0]
+	packet := parseLine(d)
+	assert.NotEqual(t, packet, nil)
 	assert.Equal(t, "a.key.with-0.dash", packet.Bucket)
 	assert.Equal(t, int64(4), packet.Value.(int64))
 	assert.Equal(t, "c", packet.Modifier)
 	assert.Equal(t, float32(1), packet.Sampling)
 
 	d = []byte("a.key.with 0.space:4|c")
-	packets = parseMessage(d)
-	assert.Equal(t, len(packets), 1)
-	packet = packets[0]
+	packet = parseLine(d)
 	assert.Equal(t, "a.key.with_0.space", packet.Bucket)
 	assert.Equal(t, int64(4), packet.Value.(int64))
 	assert.Equal(t, "c", packet.Modifier)
 	assert.Equal(t, float32(1), packet.Sampling)
 
 	d = []byte("a.key.with/0.slash:4|c")
-	packets = parseMessage(d)
-	assert.Equal(t, len(packets), 1)
-	packet = packets[0]
+	packet = parseLine(d)
 	assert.Equal(t, "a.key.with-0.slash", packet.Bucket)
 	assert.Equal(t, int64(4), packet.Value.(int64))
 	assert.Equal(t, "c", packet.Modifier)
 	assert.Equal(t, float32(1), packet.Sampling)
 
 	d = []byte("a.key.with@#*&%$^_0.garbage:4|c")
-	packets = parseMessage(d)
-	assert.Equal(t, len(packets), 1)
-	packet = packets[0]
+	packet = parseLine(d)
 	assert.Equal(t, "a.key.with_0.garbage", packet.Bucket)
 	assert.Equal(t, int64(4), packet.Value.(int64))
 	assert.Equal(t, "c", packet.Modifier)
@@ -147,9 +142,7 @@ func TestParseMessageMisc(t *testing.T) {
 
 	flag.Set("prefix", "test.")
 	d = []byte("prefix:4|c")
-	packets = parseMessage(d)
-	assert.Equal(t, len(packets), 1)
-	packet = packets[0]
+	packet = parseLine(d)
 	assert.Equal(t, "test.prefix", packet.Bucket)
 	assert.Equal(t, int64(4), packet.Value.(int64))
 	assert.Equal(t, "c", packet.Modifier)
@@ -158,9 +151,7 @@ func TestParseMessageMisc(t *testing.T) {
 
 	flag.Set("postfix", ".test")
 	d = []byte("postfix:4|c")
-	packets = parseMessage(d)
-	assert.Equal(t, len(packets), 1)
-	packet = packets[0]
+	packet = parseLine(d)
 	assert.Equal(t, "postfix.test", packet.Bucket)
 	assert.Equal(t, int64(4), packet.Value.(int64))
 	assert.Equal(t, "c", packet.Modifier)
@@ -168,77 +159,125 @@ func TestParseMessageMisc(t *testing.T) {
 	flag.Set("postfix", "")
 
 	d = []byte("a.key.with-0.dash:4|c\ngauge:3|g")
-	packets = parseMessage(d)
-	assert.Equal(t, len(packets), 2)
-	packet = packets[0]
+	parser := NewParser(bytes.NewBuffer(d), true)
+	packet, more := parser.Next()
+	assert.Equal(t, more, true)
 	assert.Equal(t, "a.key.with-0.dash", packet.Bucket)
 	assert.Equal(t, int64(4), packet.Value.(int64))
 	assert.Equal(t, "c", packet.Modifier)
 	assert.Equal(t, float32(1), packet.Sampling)
 
-	packet = packets[1]
+	packet, more = parser.Next()
+	assert.Equal(t, more, false)
 	assert.Equal(t, "gauge", packet.Bucket)
 	assert.Equal(t, GaugeData{false, false, 3}, packet.Value)
 	assert.Equal(t, "g", packet.Modifier)
 	assert.Equal(t, float32(1), packet.Sampling)
 
 	d = []byte("a.key.with-0.dash:4\ngauge3|g")
-	packets = parseMessage(d)
-	assert.Equal(t, len(packets), 0)
+	packet = parseLine(d)
+	if packet != nil {
+		t.Fail()
+	}
 
 	d = []byte("a.key.with-0.dash:4")
-	packets = parseMessage(d)
-	assert.Equal(t, len(packets), 0)
+	packet = parseLine(d)
+	if packet != nil {
+		t.Fail()
+	}
 
 	d = []byte("gorets:5m")
-	packets = parseMessage(d)
-	assert.Equal(t, len(packets), 0)
+	packet = parseLine(d)
+	if packet != nil {
+		t.Fail()
+	}
 
 	d = []byte("gorets")
-	packets = parseMessage(d)
-	assert.Equal(t, len(packets), 0)
+	packet = parseLine(d)
+	if packet != nil {
+		t.Fail()
+	}
 
 	d = []byte("gorets:")
-	packets = parseMessage(d)
-	assert.Equal(t, len(packets), 0)
+	packet = parseLine(d)
+	if packet != nil {
+		t.Fail()
+	}
 
 	d = []byte("gorets:5|mg")
-	packets = parseMessage(d)
-	assert.Equal(t, len(packets), 0)
+	packet = parseLine(d)
+	if packet != nil {
+		t.Fail()
+	}
 
 	d = []byte("gorets:5|ms|@")
-	packets = parseMessage(d)
-	assert.Equal(t, len(packets), 1)
+	packet = parseLine(d)
+	if packet != nil {
+		t.Fail()
+	}
 
 	d = []byte("")
-	packets = parseMessage(d)
-	assert.Equal(t, len(packets), 0)
+	packet = parseLine(d)
+	if packet != nil {
+		t.Fail()
+	}
 
 	d = []byte("gorets:xxx|c")
-	packets = parseMessage(d)
-	assert.Equal(t, len(packets), 0)
+	packet = parseLine(d)
+	if packet != nil {
+		t.Fail()
+	}
 
 	d = []byte("gaugor:xxx|g")
-	packets = parseMessage(d)
-	assert.Equal(t, len(packets), 0)
+	packet = parseLine(d)
+	if packet != nil {
+		t.Fail()
+	}
 
 	d = []byte("gaugor:xxx|z")
-	packets = parseMessage(d)
-	assert.Equal(t, len(packets), 0)
+	packet = parseLine(d)
+	if packet != nil {
+		t.Fail()
+	}
 
-	// reported as issue #45
-	// !!! FIXME this should really be rejected by parseMessage()
 	d = []byte("deploys.test.myservice4:100|t")
-	packets = parseMessage(d)
-	packetHandler(packets[0])
+	packet = parseLine(d)
+	if packet != nil {
+		t.Fail()
+	}
 
 	d = []byte("up-to-colon:")
-	packets = parseMessage(d)
-	assert.Equal(t, len(packets), 0)
+	packet = parseLine(d)
+	if packet != nil {
+		t.Fail()
+	}
 
 	d = []byte("up-to-pipe:1|")
-	packets = parseMessage(d)
-	assert.Equal(t, len(packets), 0)
+	packet = parseLine(d)
+	if packet != nil {
+		t.Fail()
+	}
+}
+
+func TestMultiLine(t *testing.T) {
+	b := bytes.NewBuffer([]byte("a.key.with-0.dash:4|c\ngauge:3|g"))
+	parser := NewParser(b, true)
+
+	packet, more := parser.Next()
+	assert.NotEqual(t, packet, nil)
+	assert.Equal(t, more, true)
+	assert.Equal(t, "a.key.with-0.dash", packet.Bucket)
+	assert.Equal(t, int64(4), packet.Value.(int64))
+	assert.Equal(t, "c", packet.Modifier)
+	assert.Equal(t, float32(1), packet.Sampling)
+
+	packet, more = parser.Next()
+	assert.NotEqual(t, packet, nil)
+	assert.Equal(t, more, false)
+	assert.Equal(t, "gauge", packet.Bucket)
+	assert.Equal(t, GaugeData{false, false, 3}, packet.Value)
+	assert.Equal(t, "g", packet.Modifier)
+	assert.Equal(t, float32(1), packet.Sampling)
 }
 
 func TestPacketHandlerReceiveCounter(t *testing.T) {
@@ -542,6 +581,57 @@ func TestProcessTimesLowerPercentile(t *testing.T) {
 	assert.Equal(t, string(lines[0]), "time.lower_75 1 1418052649")
 }
 
+func TestMultipleUDPSends(t *testing.T) {
+	addr := "127.0.0.1:8126"
+
+	address, _ := net.ResolveUDPAddr("udp", addr)
+	listener, err := net.ListenUDP("udp", address)
+	assert.Equal(t, nil, err)
+
+	ch := make(chan *Packet, MAX_UNPROCESSED_PACKETS)
+
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		parseTo(listener, false, ch)
+		wg.Done()
+	}()
+
+	conn, err := net.DialTimeout("udp", addr, 50*time.Millisecond)
+	assert.Equal(t, nil, err)
+
+	n, err := conn.Write([]byte("deploys.test.myservice:2|c"))
+	assert.Equal(t, nil, err)
+	assert.Equal(t, len("deploys.test.myservice:2|c"), n)
+
+	n, err = conn.Write([]byte("deploys.test.myservice:1|c"))
+	assert.Equal(t, nil, err)
+	assert.Equal(t, len("deploys.test.myservice:1|c"), n)
+
+	select {
+	case pack := <-ch:
+		assert.Equal(t, "deploys.test.myservice", pack.Bucket)
+		assert.Equal(t, int64(2), pack.Value.(int64))
+		assert.Equal(t, "c", pack.Modifier)
+		assert.Equal(t, float32(1), pack.Sampling)
+	case <-time.After(50 * time.Millisecond):
+		t.Fatal("packet receive timeout")
+	}
+
+	select {
+	case pack := <-ch:
+		assert.Equal(t, "deploys.test.myservice", pack.Bucket)
+		assert.Equal(t, int64(1), pack.Value.(int64))
+		assert.Equal(t, "c", pack.Modifier)
+		assert.Equal(t, float32(1), pack.Sampling)
+	case <-time.After(50 * time.Millisecond):
+		t.Fatal("packet receive timeout")
+	}
+
+	listener.Close()
+	wg.Wait()
+}
+
 func BenchmarkManyDifferentSensors(t *testing.B) {
 	r := rand.New(rand.NewSource(438))
 	for i := 0; i < 1000; i++ {
@@ -604,9 +694,9 @@ func BenchmarkLotsOfTimers(t *testing.B) {
 	processTimers(&buff, time.Now().Unix(), commonPercentiles)
 }
 
-func BenchmarkParseMessage(b *testing.B) {
+func BenchmarkParseLine(b *testing.B) {
 	d := []byte("a.key.with-0.dash:4|c|@0.5")
 	for i := 0; i < b.N; i++ {
-		parseMessage(d)
+		parseLine(d)
 	}
 }

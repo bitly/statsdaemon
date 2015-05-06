@@ -36,5 +36,6 @@ Usage of ./statsdaemon:
   -postfix="": Postfix for all stats
   -delete-gauges=true: don't send values to graphite for inactive gauges, as opposed to sending the previous value
   -receive-counter="": Metric name for total metrics received per interval
+  -tcpaddr="": TCP service address, if set
   -version=false: print version string
 ```
