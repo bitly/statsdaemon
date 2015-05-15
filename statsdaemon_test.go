@@ -604,6 +604,8 @@ func TestMultipleUDPSends(t *testing.T) {
 	assert.Equal(t, nil, err)
 	assert.Equal(t, len("deploys.test.myservice:2|c"), n)
 
+	n, err = conn.Write([]byte("deploys.test.my:service:2|c"))
+
 	n, err = conn.Write([]byte("deploys.test.myservice:1|c"))
 	assert.Equal(t, nil, err)
 	assert.Equal(t, len("deploys.test.myservice:1|c"), n)
