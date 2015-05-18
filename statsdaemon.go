@@ -569,11 +569,9 @@ func parseTo(conn io.ReadCloser, partialReads bool, out chan<- *Packet) {
 	parser := NewParser(conn, partialReads)
 	for {
 		p, more := parser.Next()
-		if p == nil {
-			break
+		if p != nil {
+			out <- p
 		}
-
-		out <- p
 
 		if !more {
 			break
