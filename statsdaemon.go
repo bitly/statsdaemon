@@ -36,7 +36,7 @@ type Packet struct {
 type GaugeData struct {
 	Relative bool
 	Negative bool
-	Value    uint64
+	Value    float64
 }
 
 type Uint64Slice []uint64
@@ -111,8 +111,8 @@ func init() {
 var (
 	In              = make(chan *Packet, MAX_UNPROCESSED_PACKETS)
 	counters        = make(map[string]int64)
-	gauges          = make(map[string]uint64)
-	lastGaugeValue  = make(map[string]uint64)
+	gauges          = make(map[string]float64)
+	lastGaugeValue  = make(map[string]float64)
 	timers          = make(map[string]Uint64Slice)
 	countInactivity = make(map[string]int64)
 	sets            = make(map[string][]string)
@@ -170,8 +170,8 @@ func packetHandler(s *Packet) {
 				}
 			} else {
 				// watch out for overflows
-				if gaugeData.Value > (math.MaxUint64 - gaugeValue) {
-					gaugeValue = math.MaxUint64
+				if gaugeData.Value > (math.MaxFloat64 - gaugeValue) {
+					gaugeValue = math.MaxFloat64
 				} else {
 					gaugeValue += gaugeData.Value
 				}
@@ -289,12 +289,12 @@ func processGauges(buffer *bytes.Buffer, now int64) int64 {
 
 		switch {
 		case hasChanged:
-			fmt.Fprintf(buffer, "%s %d %d\n", bucket, currentValue, now)
+			fmt.Fprintf(buffer, "%s %f %d\n", bucket, currentValue, now)
 			lastGaugeValue[bucket] = currentValue
 			gauges[bucket] = math.MaxUint64
 			num++
 		case hasLastValue && !hasChanged && !*deleteGauges:
-			fmt.Fprintf(buffer, "%s %d %d\n", bucket, lastValue, now)
+			fmt.Fprintf(buffer, "%s %f %d\n", bucket, lastValue, now)
 			num++
 		default:
 			continue
@@ -529,13 +529,13 @@ func parseLine(line []byte) *Packet {
 			s = string(val)
 		}
 
-		value, err = strconv.ParseUint(s, 10, 64)
+		value, err = strconv.ParseFloat(s, 64)
 		if err != nil {
 			log.Printf("ERROR: failed to ParseUint %s - %s", string(val), err)
 			return nil
 		}
 
-		value = GaugeData{rel, neg, value.(uint64)}
+		value = GaugeData{rel, neg, value.(float64)}
 	case "s":
 		value = string(val)
 	case "ms":
