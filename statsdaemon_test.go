@@ -323,7 +323,7 @@ func TestPacketHandlerCount(t *testing.T) {
 }
 
 func TestPacketHandlerGauge(t *testing.T) {
-	gauges = make(map[string]uint64)
+	gauges = make(map[string]float64)
 
 	p := &Packet{
 		Bucket:   "gaugor",
@@ -332,31 +332,31 @@ func TestPacketHandlerGauge(t *testing.T) {
 		Sampling: float32(1),
 	}
 	packetHandler(p)
-	assert.Equal(t, gauges["gaugor"], uint64(333))
+	assert.Equal(t, gauges["gaugor"], float64(333))
 
 	// -10
 	p.Value = GaugeData{true, true, 10}
 	packetHandler(p)
-	assert.Equal(t, gauges["gaugor"], uint64(323))
+	assert.Equal(t, gauges["gaugor"], float64(323))
 
 	// +4
 	p.Value = GaugeData{true, false, 4}
 	packetHandler(p)
-	assert.Equal(t, gauges["gaugor"], uint64(327))
+	assert.Equal(t, gauges["gaugor"], float64(327))
 
 	// <0 overflow
 	p.Value = GaugeData{false, false, 10}
 	packetHandler(p)
 	p.Value = GaugeData{true, true, 20}
 	packetHandler(p)
-	assert.Equal(t, gauges["gaugor"], uint64(0))
+	assert.Equal(t, gauges["gaugor"], float64(0))
 
 	// >2^64 overflow
-	p.Value = GaugeData{false, false, uint64(math.MaxUint64 - 10)}
+	p.Value = GaugeData{false, false, float64(math.MaxFloat64 - 10)}
 	packetHandler(p)
 	p.Value = GaugeData{true, false, 20}
 	packetHandler(p)
-	assert.Equal(t, gauges["gaugor"], uint64(math.MaxUint64))
+	assert.Equal(t, gauges["gaugor"], float64(math.MaxFloat64))
 }
 
 func TestPacketHandlerTimer(t *testing.T) {
@@ -447,7 +447,7 @@ func TestProcessTimers(t *testing.T) {
 func TestProcessGauges(t *testing.T) {
 	// Some data with expected mean of 20
 	flag.Set("delete-gauges", "false")
-	gauges = make(map[string]uint64)
+	gauges = make(map[string]float64)
 	gauges["gaugor"] = math.MaxUint64
 
 	now := int64(1418052649)
@@ -464,14 +464,14 @@ func TestProcessGauges(t *testing.T) {
 
 	gauges["gaugor"] = math.MaxUint64
 	num = processGauges(&buffer, now)
-	assert.Equal(t, buffer.String(), "gaugor 12345 1418052649\ngaugor 12345 1418052649\n")
+	assert.Equal(t, buffer.String(), "gaugor 12345.000000 1418052649\ngaugor 12345.000000 1418052649\n")
 	assert.Equal(t, num, int64(1))
 }
 
 func TestProcessDeleteGauges(t *testing.T) {
 	// Some data with expected mean of 20
 	flag.Set("delete-gauges", "true")
-	gauges = make(map[string]uint64)
+	gauges = make(map[string]float64)
 	gauges["gaugordelete"] = math.MaxUint64
 
 	now := int64(1418052649)
@@ -488,7 +488,7 @@ func TestProcessDeleteGauges(t *testing.T) {
 
 	gauges["gaugordelete"] = math.MaxUint64
 	num = processGauges(&buffer, now)
-	assert.Equal(t, buffer.String(), "gaugordelete 12345 1418052649\n")
+	assert.Equal(t, buffer.String(), "gaugordelete 12345.000000 1418052649\n")
 	assert.Equal(t, num, int64(0))
 }
 
@@ -655,7 +655,7 @@ func BenchmarkManyDifferentSensors(t *testing.B) {
 	for i := 0; i < 1000; i++ {
 		bucket := "gauge" + strconv.Itoa(i)
 		for i := 0; i < 10000; i++ {
-			a := uint64(r.Uint32() % 1000)
+			a := float64(r.Uint32() % 1000)
 			gauges[bucket] = a
 		}
 	}
