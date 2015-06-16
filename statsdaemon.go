@@ -257,14 +257,17 @@ func processCounters(buffer *bytes.Buffer, now int64) int64 {
 	var num int64
 	// continue sending zeros for counters for a short period of time even if we have no new data
 	for bucket, value := range counters {
-		fmt.Fprintf(buffer, "%s %d %d\n", bucket, value, now)
+		//fmt.Fprintf(buffer, "%s.count %d %d\n", bucket, value, now)
+                rate := float64(value)/float64(*flushInterval)
+		fmt.Fprintf(buffer, "%s.rate %f %d\n", bucket, rate, now)
 		delete(counters, bucket)
 		countInactivity[bucket] = 0
 		num++
 	}
 	for bucket, purgeCount := range countInactivity {
 		if purgeCount > 0 {
-			fmt.Fprintf(buffer, "%s %d %d\n", bucket, 0, now)
+			//fmt.Fprintf(buffer, "%s %d %d\n", bucket, 0, now)
+			fmt.Fprintf(buffer, "%s.rate %d %d\n", bucket, 0, now)
 			num++
 		}
 		countInactivity[bucket] += 1
@@ -501,6 +504,7 @@ func parseLine(line []byte) *Packet {
 	var (
 		err   error
 		value interface{}
+                stattype string
 	)
 
 	switch typeCode {
@@ -510,6 +514,7 @@ func parseLine(line []byte) *Packet {
 			log.Printf("ERROR: failed to ParseInt %s - %s", string(val), err)
 			return nil
 		}
+                stattype = "counters."
 	case "g":
 		var rel, neg bool
 		var s string
@@ -536,21 +541,24 @@ func parseLine(line []byte) *Packet {
 		}
 
 		value = GaugeData{rel, neg, value.(uint64)}
+                stattype = "gauges."
 	case "s":
 		value = string(val)
+                stattype = "timers."
 	case "ms":
 		value, err = strconv.ParseUint(string(val), 10, 64)
 		if err != nil {
 			log.Printf("ERROR: failed to ParseUint %s - %s", string(val), err)
 			return nil
 		}
+                stattype = "timers."
 	default:
 		log.Printf("ERROR: unrecognized type code %q", typeCode)
 		return nil
 	}
 
 	return &Packet{
-		Bucket:   sanitizeBucket(*prefix + string(name) + *postfix),
+		Bucket:   sanitizeBucket(*prefix + stattype + string(name) + *postfix),
 		Value:    value,
 		Modifier: typeCode,
 		Sampling: sampling,
