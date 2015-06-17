@@ -1,7 +1,5 @@
 #!/usr/bin/perl
 
-# Get the udp stats from netstat and calculate the error rate for the last second
-
 my ($rec, $err, $rec_n, $err_n) = (0,0,0,0);
 
 while (true) {
@@ -17,11 +15,12 @@ while (true) {
 		$rec_n = $1 if ($l =~ /(\d+) packets received/);
 		$err_n = $1 if ($l =~ /(\d+) packet receive errors/);
 	}
-	my $r = 1.0* ($err-$err_n) / ($rec - $rec_n);
-	print "Receive error rate $r\n";
+	my $p_n = ($rec_n - $rec);
+	my $r = 1.0* ($err_n - $err) / $p_n;
+	print "Error rate $r\t packets $p_n\n" unless ($rec == 0 && $err == 0);
 
 	$rec = $rec_n;
 	$err = $err_n;
 
-	sleep(1);
+	sleep(3);
 }
