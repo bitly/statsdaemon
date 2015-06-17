@@ -218,38 +218,43 @@ func submit(deadline time.Time) error {
 		errmsg := fmt.Sprintf("dialing %s failed - %s", *graphiteAddress, err)
 		return errors.New(errmsg)
 	}
-	defer client.Close()
-
-	err = client.SetDeadline(deadline)
-	if err != nil {
-		return err
-	}
 
 	num += processCounters(&buffer, now)
 	num += processGauges(&buffer, now)
 	num += processTimers(&buffer, now, percentThreshold)
 	num += processSets(&buffer, now)
 	if num == 0 {
+		client.Close()
 		return nil
 	}
 
-	if *debug {
-		for _, line := range bytes.Split(buffer.Bytes(), []byte("\n")) {
-			if len(line) == 0 {
-				continue
-			}
-			log.Printf("DEBUG: %s", line)
+	go func() error {
+		defer client.Close()
+
+		err = client.SetDeadline(deadline)
+		if err != nil {
+			return err
 		}
-	}
 
-	_, err = client.Write(buffer.Bytes())
-	if err != nil {
-		errmsg := fmt.Sprintf("failed to write stats - %s", err)
-		return errors.New(errmsg)
-	}
+		if *debug {
+			for _, line := range bytes.Split(buffer.Bytes(), []byte("\n")) {
+				if len(line) == 0 {
+					continue
+				}
+				log.Printf("DEBUG: %s", line)
+			}
+		}
 
-	log.Printf("sent %d stats to %s", num, *graphiteAddress)
+		_, err = client.Write(buffer.Bytes())
+		if err != nil {
+			errmsg := fmt.Sprintf("failed to write stats - %s", err)
+			return errors.New(errmsg)
+		}
 
+		log.Printf("sent %d stats to %s", num, *graphiteAddress)
+
+		return nil
+	}()
 	return nil
 }
 
@@ -258,7 +263,7 @@ func processCounters(buffer *bytes.Buffer, now int64) int64 {
 	// continue sending zeros for counters for a short period of time even if we have no new data
 	for bucket, value := range counters {
 		//fmt.Fprintf(buffer, "%s.count %d %d\n", bucket, value, now)
-                rate := float64(value)/float64(*flushInterval)
+		rate := float64(value) / float64(*flushInterval)
 		fmt.Fprintf(buffer, "%s.rate %f %d\n", bucket, rate, now)
 		delete(counters, bucket)
 		countInactivity[bucket] = 0
@@ -502,9 +507,9 @@ func parseLine(line []byte) *Packet {
 	}
 
 	var (
-		err   error
-		value interface{}
-                stattype string
+		err      error
+		value    interface{}
+		stattype string
 	)
 
 	switch typeCode {
@@ -514,7 +519,7 @@ func parseLine(line []byte) *Packet {
 			log.Printf("ERROR: failed to ParseInt %s - %s", string(val), err)
 			return nil
 		}
-                stattype = "counters."
+		stattype = "counters."
 	case "g":
 		var rel, neg bool
 		var s string
@@ -541,17 +546,17 @@ func parseLine(line []byte) *Packet {
 		}
 
 		value = GaugeData{rel, neg, value.(uint64)}
-                stattype = "gauges."
+		stattype = "gauges."
 	case "s":
 		value = string(val)
-                stattype = "timers."
+		stattype = "timers."
 	case "ms":
 		value, err = strconv.ParseUint(string(val), 10, 64)
 		if err != nil {
 			log.Printf("ERROR: failed to ParseUint %s - %s", string(val), err)
 			return nil
 		}
-                stattype = "timers."
+		stattype = "timers."
 	default:
 		log.Printf("ERROR: unrecognized type code %q", typeCode)
 		return nil
