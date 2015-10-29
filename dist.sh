@@ -14,7 +14,7 @@ goversion=$(go version | awk '{print $3}')
 echo "... running tests"
 ./test.sh || exit 1
 
-for os in linux darwin; do
+for os in linux darwin freebsd; do
     echo "... building v$version for $os/$arch"
     BUILD=$(mktemp -d -t statsdaemon.XXXXXXXX)
     TARGET="statsdaemon-$version.$os-$arch.$goversion"
