@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # build binary distributions for linux/amd64 and darwin/amd64
 set -e
