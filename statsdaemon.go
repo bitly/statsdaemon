@@ -209,6 +209,7 @@ func submit(deadline time.Time) error {
 		return nil
 	}
 
+	num += processUpdates(&buffer, now)
 	num += processCounters(&buffer, now)
 	num += processGauges(&buffer, now)
 	num += processTimers(&buffer, now, percentThreshold)
