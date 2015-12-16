@@ -273,7 +273,7 @@ func processUpdates(buffer *bytes.Buffer, now int64) int64 {
 		}
 		delete(updates, bucket)
 	}
-	maxBucket = strings.Replace(maxBucket, ".","_")
+	maxBucket = strings.Replace(maxBucket, ".","_",-1)
 	fmt.Fprintf(buffer, "updates.%s %d %d\n", maxBucket, maxValue, now)
 	return 1
 }
