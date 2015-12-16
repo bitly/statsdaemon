@@ -116,6 +116,7 @@ var (
 	timers          = make(map[string]Uint64Slice)
 	countInactivity = make(map[string]int64)
 	sets            = make(map[string][]string)
+	updates         = make(map[string]int64)
 )
 
 func monitor() {
@@ -147,6 +148,8 @@ func packetHandler(s *Packet) {
 		}
 		counters[*receiveCounter] += 1
 	}
+
+	updates[s.Bucket] +=1
 
 	switch s.Modifier {
 	case "ms":
@@ -206,6 +209,7 @@ func submit(deadline time.Time) error {
 		return nil
 	}
 
+	num += processUpdates(&buffer, now)
 	num += processCounters(&buffer, now)
 	num += processGauges(&buffer, now)
 	num += processTimers(&buffer, now, percentThreshold)
@@ -254,6 +258,28 @@ func send(address string, deadline time.Time, buffer bytes.Buffer, num int64) er
 
 	return nil
 
+}
+
+func processUpdates(buffer *bytes.Buffer, now int64) int64 {
+	if int64(len(updates)) == 0 {
+		log.Printf("No Updates found")
+		return 0
+	}
+	var maxBucket string
+	var maxValue int64
+	for bucket, value := range updates {
+		if maxBucket == "" || maxValue < value {
+			maxBucket = bucket
+			maxValue = value
+		}
+		delete(updates, bucket)
+	}
+	maxBucket = strings.Replace(maxBucket, "counters","updates",-1)
+	maxBucket = strings.Replace(maxBucket, "timers","updates",-1)
+	maxBucket = strings.Replace(maxBucket, "gauges","updates",-1)
+	log.Printf("Max updates is %s", maxBucket)
+	fmt.Fprintf(buffer, "%s %d %d\n", maxBucket, maxValue, now)
+	return 1
 }
 
 func processCounters(buffer *bytes.Buffer, now int64) int64 {
