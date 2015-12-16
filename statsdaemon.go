@@ -116,6 +116,7 @@ var (
 	timers          = make(map[string]Uint64Slice)
 	countInactivity = make(map[string]int64)
 	sets            = make(map[string][]string)
+	updates         = make(map[string]int64)
 )
 
 func monitor() {
@@ -147,6 +148,8 @@ func packetHandler(s *Packet) {
 		}
 		counters[*receiveCounter] += 1
 	}
+
+	updates[s.Bucket] +=1
 
 	switch s.Modifier {
 	case "ms":
@@ -254,6 +257,23 @@ func send(address string, deadline time.Time, buffer bytes.Buffer, num int64) er
 
 	return nil
 
+}
+
+func processUpdates(buffer *bytes.Buffer, now int64) int64 {
+	if int64(len(updates)) == 0 {
+		return 0
+	}
+	var maxBucket string
+	var maxValue int64
+	for bucket, value := range updates {
+		if maxBucket == "" || maxValue < value {
+			maxBucket = bucket
+			maxValue = value
+		}
+		delete(updates, bucket)
+	}
+	fmt.Fprintf(buffer, "%s.updates %d %d\n", maxBucket, maxValue, now)
+	return 1
 }
 
 func processCounters(buffer *bytes.Buffer, now int64) int64 {
