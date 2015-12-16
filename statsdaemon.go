@@ -262,6 +262,7 @@ func send(address string, deadline time.Time, buffer bytes.Buffer, num int64) er
 
 func processUpdates(buffer *bytes.Buffer, now int64) int64 {
 	if int64(len(updates)) == 0 {
+		log.Printf("No Updates found")
 		return 0
 	}
 	var maxBucket string
@@ -273,8 +274,11 @@ func processUpdates(buffer *bytes.Buffer, now int64) int64 {
 		}
 		delete(updates, bucket)
 	}
-	maxBucket = strings.Replace(maxBucket, ".","_",-1)
-	fmt.Fprintf(buffer, "updates.%s %d %d\n", maxBucket, maxValue, now)
+	maxBucket = strings.Replace(maxBucket, "counters","updates",-1)
+	maxBucket = strings.Replace(maxBucket, "timers","updates",-1)
+	maxBucket = strings.Replace(maxBucket, "gauges","updates",-1)
+	log.Printf("Max updates is %s", maxBucket)
+	fmt.Fprintf(buffer, "%s %d %d\n", maxBucket, maxValue, now)
 	return 1
 }
 
