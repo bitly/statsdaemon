@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -11,12 +12,15 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
+
+	"gopkg.in/inconshreveable/log15.v2"
 )
 
 const (
@@ -365,10 +369,14 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 			fmt.Fprintf(buffer, tmpl, bucketWithoutPostfix, pctstr, *postfix, maxAtThreshold, now)
 		}
 
-		fmt.Fprintf(buffer, "%s.mean%s %f %d\n", bucketWithoutPostfix, *postfix, mean, now)
-		fmt.Fprintf(buffer, "%s.upper%s %d %d\n", bucketWithoutPostfix, *postfix, max, now)
-		fmt.Fprintf(buffer, "%s.lower%s %d %d\n", bucketWithoutPostfix, *postfix, min, now)
-		fmt.Fprintf(buffer, "%s.count%s %d %d\n", bucketWithoutPostfix, *postfix, count, now)
+		for _, re := range regexps {
+			if re.MatchString(bucketWithoutPostfix) {
+				fmt.Fprintf(buffer, "%s.mean%s %f %d\n", bucketWithoutPostfix, *postfix, mean, now)
+				fmt.Fprintf(buffer, "%s.upper%s %d %d\n", bucketWithoutPostfix, *postfix, max, now)
+				fmt.Fprintf(buffer, "%s.lower%s %d %d\n", bucketWithoutPostfix, *postfix, min, now)
+				fmt.Fprintf(buffer, "%s.count%s %d %d\n", bucketWithoutPostfix, *postfix, count, now)
+			}
+		}
 
 		delete(timers, bucket)
 	}
@@ -608,12 +616,34 @@ func tcpListener() {
 	}
 }
 
+var config struct {
+	Regexps []string `json:"regexps"`
+}
+
+var regexps []*regexp.Regexp
+
 func main() {
 	flag.Parse()
 
 	if *showVersion {
 		fmt.Printf("statsdaemon v%s (built w/%s)\n", VERSION, runtime.Version())
 		return
+	}
+
+	file, err := os.Open("config.json")
+	if err != nil {
+		log15.Error("Error loading config", "err", err)
+		return
+	}
+	if err := json.NewDecoder(file).Decode(&config); err != nil {
+		log15.Error("couldn't parse config", "err", err)
+		return
+	}
+	for _, re := range config.Regexps {
+		compiled, err := regexp.Compile(re)
+		if err == nil {
+			regexps = append(regexps, compiled)
+		}
 	}
 
 	signalchan = make(chan os.Signal, 1)
