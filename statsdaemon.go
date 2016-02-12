@@ -118,6 +118,7 @@ var (
 	gauges          = make(map[string]uint64)
 	lastGaugeValue  = make(map[string]uint64)
 	timers          = make(map[string]Uint64Slice)
+	timersFlags     = make(map[string]bool)
 	countInactivity = make(map[string]int64)
 	sets            = make(map[string][]string)
 )
@@ -158,6 +159,11 @@ func packetHandler(s *Packet) {
 		if !ok {
 			var t Uint64Slice
 			timers[s.Bucket] = t
+			for _, m := range config.Metrics {
+				if m.RegexpCompiled.MatchString(s.Bucket) {
+					timersFlags[s.Bucket] = true
+				}
+			}
 		}
 		timers[s.Bucket] = append(timers[s.Bucket], s.Value.(uint64))
 	case "g":
@@ -369,13 +375,11 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 			fmt.Fprintf(buffer, tmpl, bucketWithoutPostfix, pctstr, *postfix, maxAtThreshold, now)
 		}
 
-		for _, re := range regexps {
-			if re.MatchString(bucketWithoutPostfix) {
-				fmt.Fprintf(buffer, "%s.mean%s %f %d\n", bucketWithoutPostfix, *postfix, mean, now)
-				fmt.Fprintf(buffer, "%s.upper%s %d %d\n", bucketWithoutPostfix, *postfix, max, now)
-				fmt.Fprintf(buffer, "%s.lower%s %d %d\n", bucketWithoutPostfix, *postfix, min, now)
-				fmt.Fprintf(buffer, "%s.count%s %d %d\n", bucketWithoutPostfix, *postfix, count, now)
-			}
+		if _, ok := timersFlags[bucketWithoutPostfix]; ok {
+			fmt.Fprintf(buffer, "%s.mean%s %f %d\n", bucketWithoutPostfix, *postfix, mean, now)
+			fmt.Fprintf(buffer, "%s.upper%s %d %d\n", bucketWithoutPostfix, *postfix, max, now)
+			fmt.Fprintf(buffer, "%s.lower%s %d %d\n", bucketWithoutPostfix, *postfix, min, now)
+			fmt.Fprintf(buffer, "%s.count%s %d %d\n", bucketWithoutPostfix, *postfix, count, now)
 		}
 
 		delete(timers, bucket)
@@ -616,11 +620,17 @@ func tcpListener() {
 	}
 }
 
-var config struct {
-	Regexps []string `json:"regexps"`
+type Metric struct {
+	Regexp           string         `json:"regexp"`
+	RegexpCompiled   *regexp.Regexp `json:"-"`
+	Threshold        int            `json:"threshold"`
+	CountPersistence bool           `json:"count_persistence"`
+	Functions        []string       `json:"func"`
 }
 
-var regexps []*regexp.Regexp
+var config struct {
+	Metrics []Metric `json:"metrics"`
+}
 
 func main() {
 	flag.Parse()
@@ -639,10 +649,10 @@ func main() {
 		log15.Error("couldn't parse config", "err", err)
 		return
 	}
-	for _, re := range config.Regexps {
-		compiled, err := regexp.Compile(re)
+	for i, m := range config.Metrics {
+		compiled, err := regexp.Compile(m.Regexp)
 		if err == nil {
-			regexps = append(regexps, compiled)
+			config.Metrics[i].RegexpCompiled = compiled
 		}
 	}
 
