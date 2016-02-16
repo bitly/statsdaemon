@@ -119,6 +119,7 @@ var (
 	lastGaugeValue  = make(map[string]uint64)
 	timers          = make(map[string]Uint64Slice)
 	timersFlags     = make(map[string]bool)
+	timersMetrics   = make(map[string]Metric)
 	countInactivity = make(map[string]int64)
 	sets            = make(map[string][]string)
 )
@@ -162,6 +163,7 @@ func packetHandler(s *Packet) {
 			for _, m := range config.Metrics {
 				if m.RegexpCompiled.MatchString(s.Bucket) {
 					timersFlags[s.Bucket] = true
+					timersMetrics[s.Bucket] = m
 				}
 			}
 		}
@@ -334,6 +336,12 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 		bucketWithoutPostfix := bucket[:len(bucket)-len(*postfix)]
 		num++
 
+		var percentiles Percentiles
+		metric, metricExists := timersMetrics[bucketWithoutPostfix]
+		if metricExists {
+			percentiles = Percentiles{&Percentile{float64(metric.Threshold), strconv.Itoa(metric.Threshold)}}
+		}
+
 		sort.Sort(timer)
 		min := timer[0]
 		max := timer[len(timer)-1]
@@ -346,7 +354,10 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 		}
 		mean := float64(sum) / float64(len(timer))
 
-		for _, pct := range pctls {
+		medianPosition := int(math.Floor(float64((len(timer)+1)/2.0) + 0.5))
+		median := timer[medianPosition]
+
+		for _, pct := range percentiles {
 			if len(timer) > 1 {
 				var abs float64
 				if pct.float >= 0 {
@@ -372,11 +383,15 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 				tmpl = "%s.lower_%s%s %d %d\n"
 				pctstr = pct.str[1:]
 			}
-			fmt.Fprintf(buffer, tmpl, bucketWithoutPostfix, pctstr, *postfix, maxAtThreshold, now)
+
+			if _, ok := timersFlags[bucketWithoutPostfix]; ok {
+				fmt.Fprintf(buffer, tmpl, bucketWithoutPostfix, pctstr, *postfix, maxAtThreshold, now)
+			}
 		}
 
 		if _, ok := timersFlags[bucketWithoutPostfix]; ok {
 			fmt.Fprintf(buffer, "%s.mean%s %f %d\n", bucketWithoutPostfix, *postfix, mean, now)
+			fmt.Fprintf(buffer, "%s.median%s %f %d\n", bucketWithoutPostfix, *postfix, median, now)
 			fmt.Fprintf(buffer, "%s.upper%s %d %d\n", bucketWithoutPostfix, *postfix, max, now)
 			fmt.Fprintf(buffer, "%s.lower%s %d %d\n", bucketWithoutPostfix, *postfix, min, now)
 			fmt.Fprintf(buffer, "%s.count%s %d %d\n", bucketWithoutPostfix, *postfix, count, now)
