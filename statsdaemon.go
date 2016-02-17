@@ -354,8 +354,14 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 		}
 		mean := float64(sum) / float64(len(timer))
 
+		sumF := float64(0)
+		for _, value := range timer {
+			sumF += math.Pow(float64(value)-mean, 2.0)
+		}
+		stDeviation := math.Sqrt(sumF / float64(len(timer)))
+
 		medianPosition := int(math.Floor(float64((len(timer)+1)/2.0) + 0.5))
-		median := timer[medianPosition]
+		median := float64(timer[medianPosition])
 
 		for _, pct := range percentiles {
 			if len(timer) > 1 {
@@ -392,6 +398,7 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 		if _, ok := timersFlags[bucketWithoutPostfix]; ok {
 			fmt.Fprintf(buffer, "%s.mean%s %f %d\n", bucketWithoutPostfix, *postfix, mean, now)
 			fmt.Fprintf(buffer, "%s.median%s %f %d\n", bucketWithoutPostfix, *postfix, median, now)
+			fmt.Fprintf(buffer, "%s.std%s %f %d\n", bucketWithoutPostfix, *postfix, stDeviation, now)
 			fmt.Fprintf(buffer, "%s.upper%s %d %d\n", bucketWithoutPostfix, *postfix, max, now)
 			fmt.Fprintf(buffer, "%s.lower%s %d %d\n", bucketWithoutPostfix, *postfix, min, now)
 			fmt.Fprintf(buffer, "%s.count%s %d %d\n", bucketWithoutPostfix, *postfix, count, now)
