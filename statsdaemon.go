@@ -335,11 +335,19 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 	for bucket, timer := range timers {
 		bucketWithoutPostfix := bucket[:len(bucket)-len(*postfix)]
 		num++
+		if _, ok := timersFlags[bucketWithoutPostfix]; !ok {
+			log15.Debug("No metrics are configured for this bucket. Ignoring calculations & continuing.", "bucket", bucketWithoutPostfix)
+			continue
+		}
 
 		var percentiles Percentiles
 		metric, metricExists := timersMetrics[bucketWithoutPostfix]
 		if metricExists {
-			percentiles = Percentiles{&Percentile{float64(metric.Threshold), strconv.Itoa(metric.Threshold)}}
+			percent := Percentiles{}
+			for _, percThr := range metric.PercentThresholds {
+				percent = append(percent, &Percentile{percThr, strconv.Itoa(int(percThr))})
+			}
+			percentiles = percent
 		}
 
 		sort.Sort(timer)
@@ -348,9 +356,13 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 		maxAtThreshold := max
 		count := len(timer)
 
+		var violationsCount int
 		sum := uint64(0)
 		for _, value := range timer {
 			sum += value
+			if metricExists && value > metric.Threshold {
+				violationsCount++
+			}
 		}
 		mean := float64(sum) / float64(len(timer))
 
@@ -361,7 +373,7 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 		stDeviation := math.Sqrt(sumF / float64(len(timer)))
 
 		medianPosition := int(math.Floor(float64((len(timer)+1)/2.0) + 0.5))
-		median := float64(timer[medianPosition])
+		median := timer[medianPosition]
 
 		for _, pct := range percentiles {
 			if len(timer) > 1 {
@@ -395,13 +407,27 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 			}
 		}
 
-		if _, ok := timersFlags[bucketWithoutPostfix]; ok {
-			fmt.Fprintf(buffer, "%s.mean%s %f %d\n", bucketWithoutPostfix, *postfix, mean, now)
-			fmt.Fprintf(buffer, "%s.median%s %f %d\n", bucketWithoutPostfix, *postfix, median, now)
-			fmt.Fprintf(buffer, "%s.std%s %f %d\n", bucketWithoutPostfix, *postfix, stDeviation, now)
-			fmt.Fprintf(buffer, "%s.upper%s %d %d\n", bucketWithoutPostfix, *postfix, max, now)
-			fmt.Fprintf(buffer, "%s.lower%s %d %d\n", bucketWithoutPostfix, *postfix, min, now)
-			fmt.Fprintf(buffer, "%s.count%s %d %d\n", bucketWithoutPostfix, *postfix, count, now)
+		fmt.Fprintf(buffer, "%s.mean%s %f %d\n", bucketWithoutPostfix, *postfix, mean, now)
+
+		if metricExists {
+			for _, funcName := range metric.Functions {
+				switch funcName {
+				case "median":
+					fmt.Fprintf(buffer, "%s.median%s %d %d\n", bucketWithoutPostfix, *postfix, median, now)
+				case "std":
+					fmt.Fprintf(buffer, "%s.std%s %f %d\n", bucketWithoutPostfix, *postfix, stDeviation, now)
+				case "sum":
+					fmt.Fprintf(buffer, "%s.sum%s %d %d\n", bucketWithoutPostfix, *postfix, sum, now)
+				case "sla_violations":
+					fmt.Fprintf(buffer, "%s.sla_violations%s %d %d\n", bucketWithoutPostfix, *postfix, violationsCount, now)
+				case "upper":
+					fmt.Fprintf(buffer, "%s.upper%s %d %d\n", bucketWithoutPostfix, *postfix, max, now)
+				case "lower":
+					fmt.Fprintf(buffer, "%s.lower%s %d %d\n", bucketWithoutPostfix, *postfix, min, now)
+				case "count":
+					fmt.Fprintf(buffer, "%s.count%s %d %d\n", bucketWithoutPostfix, *postfix, count, now)
+				}
+			}
 		}
 
 		delete(timers, bucket)
@@ -643,11 +669,12 @@ func tcpListener() {
 }
 
 type Metric struct {
-	Regexp           string         `json:"regexp"`
-	RegexpCompiled   *regexp.Regexp `json:"-"`
-	Threshold        int            `json:"threshold"`
-	CountPersistence bool           `json:"count_persistence"`
-	Functions        []string       `json:"func"`
+	Regexp            string         `json:"regexp"`
+	RegexpCompiled    *regexp.Regexp `json:"-"`
+	Threshold         uint64         `json:"threshold"`
+	PercentThresholds []float64      `json:"percent-thresholds"`
+	CountPersistence  bool           `json:"count_persistence"`
+	Functions         []string       `json:"func"`
 }
 
 var config struct {

@@ -1,0 +1,20 @@
+{
+ "metrics": [
+  {
+   "regexp": ".*metric1",
+   "threshold": 10,
+   "percent-thresholds": [10, 95],
+   "count_persistence": true,
+   "func": []
+  },
+  {
+   "regexp": ".*timing1",
+   "threshold": 950,
+   "percent-thresholds": [80, 95],
+   "count_persistence": false,
+   "func": [
+    "median", "std", "count", "sum", "sla_violations", "upper", "lower"
+   ]
+  }
+ ]
+}
