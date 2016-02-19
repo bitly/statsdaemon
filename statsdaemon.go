@@ -164,6 +164,7 @@ func packetHandler(s *Packet) {
 				if m.RegexpCompiled.MatchString(s.Bucket) {
 					timersFlags[s.Bucket] = true
 					timersMetrics[s.Bucket] = m
+					break
 				}
 			}
 		}
@@ -336,7 +337,7 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 		bucketWithoutPostfix := bucket[:len(bucket)-len(*postfix)]
 		num++
 		if _, ok := timersFlags[bucketWithoutPostfix]; !ok {
-			log15.Debug("No metrics are configured for this bucket. Ignoring calculations & continuing.", "bucket", bucketWithoutPostfix)
+			log15.Debug("No metrics are configured for this bucket. Maybe you need block with regexp '.*' in the end of config. Ignoring calculations & continuing.", "bucket", bucketWithoutPostfix)
 			continue
 		}
 

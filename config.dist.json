@@ -15,6 +15,13 @@
    "func": [
     "median", "std", "count", "sum", "sla_violations", "upper", "lower"
    ]
+  },
+  {
+   "regexp": ".*",
+   "threshold": 1000000000000000000,
+   "percent-thresholds": [],
+   "count_persistence": false,
+   "func": []
   }
  ]
 }
