@@ -1,3 +1,7 @@
+test:
+  post:
+    - mkdir $CIRCLE_ARTIFACTS/dist/
+    - tar czvf $CIRCLE_ARTIFACTS/dist/statsdaemon.tar.gz statsdaemon
 general:
   artifacts:
-    - "dist/statsdaemon*.tar.gz"
+    - "dist/statsdaemon.tar.gz"
