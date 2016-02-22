@@ -1,0 +1,3 @@
+general:
+  artifacts:
+    - "dist/statsdaemon*.tar.gz"
