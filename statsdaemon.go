@@ -602,8 +602,13 @@ func parseLine(line []byte) *Packet {
 	case "ms":
 		value, err = strconv.ParseUint(string(val), 10, 64)
 		if err != nil {
-			log.Printf("ERROR: failed to ParseUint %s - %s", string(val), err)
-			return nil
+			log.Printf("WARN: failed to ParseUint %s, %s - %s", name, string(val), err)
+			valueFloat, err := strconv.ParseFloat(string(val), 64)
+			if err != nil {
+				log.Printf("ERROR: failed to ParseUint in float-workaround %s, %s - %s", name, string(val), err)
+				return nil
+			}
+			value = int(valueFloat)
 		}
 	default:
 		log.Printf("ERROR: unrecognized type code %q", typeCode)
