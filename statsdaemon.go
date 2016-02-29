@@ -608,7 +608,7 @@ func parseLine(line []byte) *Packet {
 				log.Printf("ERROR: failed to ParseUint in float-workaround %s, %s - %s", name, string(val), err)
 				return nil
 			}
-			value = int(valueFloat)
+			value = uint64(valueFloat)
 		}
 	default:
 		log.Printf("ERROR: unrecognized type code %q", typeCode)
