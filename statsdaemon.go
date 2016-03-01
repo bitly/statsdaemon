@@ -393,6 +393,9 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 				if pct.float >= 0 {
 					indexOfPerc -= 1 // index offset=0
 				}
+				if indexOfPerc < 0 {
+					indexOfPerc = 0
+				}
 				maxAtThreshold = timer[indexOfPerc]
 			}
 
