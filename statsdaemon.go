@@ -374,6 +374,9 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 		stDeviation := math.Sqrt(sumF / float64(len(timer)))
 
 		medianPosition := int(math.Floor(float64((len(timer)+1)/2.0) + 0.5))
+		if medianPosition >= count {
+			medianPosition = count - 1
+		}
 		median := timer[medianPosition]
 
 		for _, pct := range percentiles {
@@ -389,6 +392,9 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 				indexOfPerc := int(math.Floor(((abs / 100.0) * float64(count)) + 0.5))
 				if pct.float >= 0 {
 					indexOfPerc -= 1 // index offset=0
+				}
+				if indexOfPerc < 0 {
+					indexOfPerc = 0
 				}
 				maxAtThreshold = timer[indexOfPerc]
 			}
@@ -608,7 +614,7 @@ func parseLine(line []byte) *Packet {
 				log.Printf("ERROR: failed to ParseUint in float-workaround %s, %s - %s", name, string(val), err)
 				return nil
 			}
-			value = int(valueFloat)
+			value = uint64(valueFloat)
 		}
 	default:
 		log.Printf("ERROR: unrecognized type code %q", typeCode)
