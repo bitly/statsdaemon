@@ -283,7 +283,7 @@ func processGauges(buffer *bytes.Buffer, now int64) int64 {
 		lastValue, hasLastValue := lastGaugeValue[bucket]
 		var hasChanged bool
 
-		if gauge != math.MaxUint64 {
+		if gauge != math.MaxFloat64 {
 			hasChanged = true
 		}
 
@@ -291,7 +291,7 @@ func processGauges(buffer *bytes.Buffer, now int64) int64 {
 		case hasChanged:
 			fmt.Fprintf(buffer, "%s %s %d\n", bucket, strconv.FormatFloat(currentValue, 'f', -1, 64), now)
 			lastGaugeValue[bucket] = currentValue
-			gauges[bucket] = math.MaxUint64
+			gauges[bucket] = math.MaxFloat64
 			num++
 		case hasLastValue && !hasChanged && !*deleteGauges:
 			fmt.Fprintf(buffer, "%s %s %d\n", bucket, strconv.FormatFloat(lastValue, 'f', -1, 64), now)
