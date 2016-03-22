@@ -470,51 +470,61 @@ func TestProcessTimers(t *testing.T) {
 }
 
 func TestProcessGauges(t *testing.T) {
-	// Some data with expected mean of 20
 	flag.Set("delete-gauges", "false")
 	gauges = make(map[string]float64)
-	gauges["gaugor"] = math.MaxFloat64
+	var buffer bytes.Buffer
 
 	now := int64(1418052649)
-
-	var buffer bytes.Buffer
 
 	num := processGauges(&buffer, now)
 	assert.Equal(t, num, int64(0))
 	assert.Equal(t, buffer.String(), "")
 
-	gauges["gaugor"] = 12345
+	p := &Packet{
+		Bucket:   "gaugor",
+		Value:    GaugeData{false, false, 12345},
+		Modifier: "g",
+		Sampling: 1.0,
+	}
+	packetHandler(p)
 	num = processGauges(&buffer, now)
 	assert.Equal(t, num, int64(1))
+	num = processGauges(&buffer, now+20)
+	assert.Equal(t, num, int64(1))
+	assert.Equal(t, buffer.String(), "gaugor 12345 1418052649\ngaugor 12345 1418052669\n")
 
-	gauges["gaugor"] = math.MaxFloat64
-	num = processGauges(&buffer, now)
-	assert.Equal(t, buffer.String(), "gaugor 12345 1418052649\ngaugor 12345 1418052649\n")
+	buffer = bytes.Buffer{}
+	p.Value = GaugeData{false, false, 12346.75}
+	packetHandler(p)
+	p.Value = GaugeData{false, false, 12347.25}
+	packetHandler(p)
+	num = processGauges(&buffer, now+40)
 	assert.Equal(t, num, int64(1))
+	assert.Equal(t, buffer.String(), "gaugor 12347.25 1418052689\n")
 }
 
 func TestProcessDeleteGauges(t *testing.T) {
-	// Some data with expected mean of 20
 	flag.Set("delete-gauges", "true")
 	gauges = make(map[string]float64)
-	gauges["gaugordelete"] = math.MaxFloat64
+	var buffer bytes.Buffer
 
 	now := int64(1418052649)
 
-	var buffer bytes.Buffer
+	p := &Packet{
+		Bucket:   "gaugordelete",
+		Value:    GaugeData{false, false, 12345},
+		Modifier: "g",
+		Sampling: 1.0,
+	}
 
+	packetHandler(p)
 	num := processGauges(&buffer, now)
-	assert.Equal(t, num, int64(0))
-	assert.Equal(t, buffer.String(), "")
-
-	gauges["gaugordelete"] = 12345
-	num = processGauges(&buffer, now)
 	assert.Equal(t, num, int64(1))
-
-	gauges["gaugordelete"] = math.MaxFloat64
-	num = processGauges(&buffer, now)
 	assert.Equal(t, buffer.String(), "gaugordelete 12345 1418052649\n")
+
+	num = processGauges(&buffer, now+20)
 	assert.Equal(t, num, int64(0))
+	assert.Equal(t, buffer.String(), "gaugordelete 12345 1418052649\n")
 }
 
 func TestProcessSets(t *testing.T) {
