@@ -112,7 +112,6 @@ var (
 	In              = make(chan *Packet, MAX_UNPROCESSED_PACKETS)
 	counters        = make(map[string]float64)
 	gauges          = make(map[string]float64)
-	lastGaugeValue  = make(map[string]float64)
 	timers          = make(map[string]Float64Slice)
 	countInactivity = make(map[string]int64)
 	sets            = make(map[string][]string)
@@ -278,26 +277,11 @@ func processCounters(buffer *bytes.Buffer, now int64) int64 {
 func processGauges(buffer *bytes.Buffer, now int64) int64 {
 	var num int64
 
-	for bucket, gauge := range gauges {
-		currentValue := gauge
-		lastValue, hasLastValue := lastGaugeValue[bucket]
-		var hasChanged bool
-
-		if gauge != math.MaxFloat64 {
-			hasChanged = true
-		}
-
-		switch {
-		case hasChanged:
-			fmt.Fprintf(buffer, "%s %s %d\n", bucket, strconv.FormatFloat(currentValue, 'f', -1, 64), now)
-			lastGaugeValue[bucket] = currentValue
-			gauges[bucket] = math.MaxFloat64
-			num++
-		case hasLastValue && !hasChanged && !*deleteGauges:
-			fmt.Fprintf(buffer, "%s %s %d\n", bucket, strconv.FormatFloat(lastValue, 'f', -1, 64), now)
-			num++
-		default:
-			continue
+	for bucket, currentValue := range gauges {
+		fmt.Fprintf(buffer, "%s %s %d\n", bucket, strconv.FormatFloat(currentValue, 'f', -1, 64), now)
+		num++
+		if *deleteGauges {
+			delete(gauges, bucket)
 		}
 	}
 	return num
@@ -512,7 +496,7 @@ func parseLine(line []byte) *Packet {
 	case "c":
 		value, err = strconv.ParseFloat(string(val), 64)
 		if err != nil {
-			log.Printf("ERROR: failed to ParseInt %s - %s", string(val), err)
+			log.Printf("ERROR: failed to ParseFloat %s - %s", string(val), err)
 			return nil
 		}
 	case "g":
@@ -536,7 +520,7 @@ func parseLine(line []byte) *Packet {
 
 		value, err = strconv.ParseFloat(s, 64)
 		if err != nil {
-			log.Printf("ERROR: failed to ParseUint %s - %s", string(val), err)
+			log.Printf("ERROR: failed to ParseFloat %s - %s", string(val), err)
 			return nil
 		}
 
