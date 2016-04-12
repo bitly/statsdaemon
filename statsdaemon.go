@@ -185,7 +185,7 @@ func packetHandler(s *Packet) {
 		if !ok {
 			counters[s.Bucket] = 0
 		}
-		counters[s.Bucket] += float64(s.Value.(int64)) * float64(1/s.Sampling)
+		counters[s.Bucket] += s.Value.(float64) * float64(1/s.Sampling)
 	case "s":
 		_, ok := sets[s.Bucket]
 		if !ok {

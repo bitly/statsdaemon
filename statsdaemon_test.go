@@ -311,7 +311,7 @@ func TestPacketHandlerReceiveCounter(t *testing.T) {
 
 	p := &Packet{
 		Bucket:   "gorets",
-		Value:    int64(100),
+		Value:    float64(100),
 		Modifier: "c",
 		Sampling: float32(1),
 	}
@@ -327,22 +327,22 @@ func TestPacketHandlerCount(t *testing.T) {
 
 	p := &Packet{
 		Bucket:   "gorets",
-		Value:    int64(100),
+		Value:    float64(100),
 		Modifier: "c",
 		Sampling: float32(1),
 	}
 	packetHandler(p)
 	assert.Equal(t, counters["gorets"], float64(100))
 
-	p.Value = int64(3)
+	p.Value = float64(3)
 	packetHandler(p)
 	assert.Equal(t, counters["gorets"], float64(103))
 
-	p.Value = int64(-4)
+	p.Value = float64(-4)
 	packetHandler(p)
 	assert.Equal(t, counters["gorets"], float64(99))
 
-	p.Value = int64(-100)
+	p.Value = float64(-100)
 	packetHandler(p)
 	assert.Equal(t, counters["gorets"], float64(-1))
 }
