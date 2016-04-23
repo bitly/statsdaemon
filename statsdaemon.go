@@ -28,15 +28,10 @@ var signalchan chan os.Signal
 
 type Packet struct {
 	Bucket   string
-	Value    interface{}
+	ValFlt   float64
+	ValStr   string
 	Modifier string
 	Sampling float32
-}
-
-type GaugeData struct {
-	Relative bool
-	Negative bool
-	Value    float64
 }
 
 type Float64Slice []float64
@@ -154,29 +149,26 @@ func packetHandler(s *Packet) {
 			var t Float64Slice
 			timers[s.Bucket] = t
 		}
-		timers[s.Bucket] = append(timers[s.Bucket], s.Value.(float64))
+		timers[s.Bucket] = append(timers[s.Bucket], s.ValFlt)
 	case "g":
 		gaugeValue, _ := gauges[s.Bucket]
 
-		gaugeData := s.Value.(GaugeData)
-		if gaugeData.Relative {
-			if gaugeData.Negative {
-				// subtract checking for -ve numbers
-				if gaugeData.Value > gaugeValue {
-					gaugeValue = 0
-				} else {
-					gaugeValue -= gaugeData.Value
-				}
+		if s.ValStr == "" {
+			gaugeValue = s.ValFlt
+		} else if s.ValStr == "+" {
+			// watch out for overflows
+			if s.ValFlt > (math.MaxFloat64 - gaugeValue) {
+				gaugeValue = math.MaxFloat64
 			} else {
-				// watch out for overflows
-				if gaugeData.Value > (math.MaxFloat64 - gaugeValue) {
-					gaugeValue = math.MaxFloat64
-				} else {
-					gaugeValue += gaugeData.Value
-				}
+				gaugeValue += s.ValFlt
 			}
-		} else {
-			gaugeValue = gaugeData.Value
+		} else if s.ValStr == "-" {
+			// subtract checking for negative numbers
+			if s.ValFlt > gaugeValue {
+				gaugeValue = 0
+			} else {
+				gaugeValue -= s.ValFlt
+			}
 		}
 
 		gauges[s.Bucket] = gaugeValue
@@ -185,13 +177,13 @@ func packetHandler(s *Packet) {
 		if !ok {
 			counters[s.Bucket] = 0
 		}
-		counters[s.Bucket] += s.Value.(float64) * float64(1/s.Sampling)
+		counters[s.Bucket] += s.ValFlt * float64(1/s.Sampling)
 	case "s":
 		_, ok := sets[s.Bucket]
 		if !ok {
 			sets[s.Bucket] = make([]string, 0)
 		}
-		sets[s.Bucket] = append(sets[s.Bucket], s.Value.(string))
+		sets[s.Bucket] = append(sets[s.Bucket], s.ValStr)
 	}
 }
 
@@ -488,47 +480,36 @@ func parseLine(line []byte) *Packet {
 	}
 
 	var (
-		err   error
-		value interface{}
+		err      error
+		floatval float64
+		strval   string
 	)
 
 	switch typeCode {
 	case "c":
-		value, err = strconv.ParseFloat(string(val), 64)
+		floatval, err = strconv.ParseFloat(string(val), 64)
 		if err != nil {
 			log.Printf("ERROR: failed to ParseFloat %s - %s", string(val), err)
 			return nil
 		}
 	case "g":
-		var rel, neg bool
 		var s string
 
-		switch val[0] {
-		case '+':
-			rel = true
-			neg = false
+		if val[0] == '+' || val[0] == '-' {
+			strval = string(val[0])
 			s = string(val[1:])
-		case '-':
-			rel = true
-			neg = true
-			s = string(val[1:])
-		default:
-			rel = false
-			neg = false
+		} else {
 			s = string(val)
 		}
-
-		value, err = strconv.ParseFloat(s, 64)
+		floatval, err = strconv.ParseFloat(s, 64)
 		if err != nil {
 			log.Printf("ERROR: failed to ParseFloat %s - %s", string(val), err)
 			return nil
 		}
-
-		value = GaugeData{rel, neg, value.(float64)}
 	case "s":
-		value = string(val)
+		strval = string(val)
 	case "ms":
-		value, err = strconv.ParseFloat(string(val), 64)
+		floatval, err = strconv.ParseFloat(string(val), 64)
 		if err != nil {
 			log.Printf("ERROR: failed to ParseFloat %s - %s", string(val), err)
 			return nil
@@ -540,7 +521,8 @@ func parseLine(line []byte) *Packet {
 
 	return &Packet{
 		Bucket:   sanitizeBucket(*prefix + string(name) + *postfix),
-		Value:    value,
+		ValFlt:   floatval,
+		ValStr:   strval,
 		Modifier: typeCode,
 		Sampling: sampling,
 	}
