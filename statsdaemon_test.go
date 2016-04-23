@@ -747,9 +747,82 @@ func BenchmarkLotsOfTimers(t *testing.B) {
 	processTimers(&buff, time.Now().Unix(), commonPercentiles)
 }
 
-func BenchmarkParseLine(b *testing.B) {
-	d := []byte("a.key.with-0.dash:4|c|@0.5")
+func BenchmarkParseLineCounter(b *testing.B) {
+	d1 := []byte("a.key.with-0.dash:4|c|@0.5")
+	d2 := []byte("normal.key.space:1|c")
+
 	for i := 0; i < b.N; i++ {
-		parseLine(d)
+		parseLine(d1)
+		parseLine(d2)
+	}
+}
+func BenchmarkParseLineGauge(b *testing.B) {
+	d1 := []byte("gaugor.whatever:333.4|g")
+	d2 := []byte("gaugor.whatever:-5|g")
+
+	for i := 0; i < b.N; i++ {
+		parseLine(d1)
+		parseLine(d2)
+	}
+}
+func BenchmarkParseLineTimer(b *testing.B) {
+	d1 := []byte("glork.some.keyspace:3.7211|ms")
+	d2 := []byte("glork.some.keyspace:11223|ms")
+
+	for i := 0; i < b.N; i++ {
+		parseLine(d1)
+		parseLine(d2)
+	}
+}
+func BenchmarkParseLineSet(b *testing.B) {
+	d1 := []byte("setof.some.keyspace:hiya|s")
+	d2 := []byte("setof.some.keyspace:411|s")
+
+	for i := 0; i < b.N; i++ {
+		parseLine(d1)
+		parseLine(d2)
+	}
+}
+func BenchmarkPacketHandlerCounter(b *testing.B) {
+	d1 := parseLine([]byte("a.key.with-0.dash:4|c|@0.5"))
+	d2 := parseLine([]byte("normal.key.space:1|c"))
+	counters = make(map[string]float64)
+
+	for i := 0; i < b.N; i++ {
+		packetHandler(d1)
+		packetHandler(d2)
+	}
+}
+func BenchmarkPacketHandlerGauge(b *testing.B) {
+	d1 := parseLine([]byte("gaugor.whatever:333.4|g"))
+	d2 := parseLine([]byte("gaugor.whatever:-5|g"))
+	gauges = make(map[string]float64)
+
+	for i := 0; i < b.N; i++ {
+		packetHandler(d1)
+		packetHandler(d2)
+	}
+}
+func BenchmarkPacketHandlerTimer(b *testing.B) {
+	d1 := parseLine([]byte("glork.some.keyspace:3.7211|ms"))
+	d2 := parseLine([]byte("glork.some.keyspace:11223|ms"))
+	timers = make(map[string]Float64Slice)
+
+	for i := 0; i < b.N; i++ {
+		packetHandler(d1)
+		packetHandler(d2)
+	}
+}
+func BenchmarkPacketHandlerSet(b *testing.B) {
+	d1 := parseLine([]byte("setof.some.keyspace:hiya|s"))
+	d2 := parseLine([]byte("setof.some.keyspace:411|s"))
+	sets = make(map[string][]string)
+
+	for i := 0; i < b.N; i++ {
+		if i&0xff == 0xff {
+			sets = make(map[string][]string)
+		}
+		packetHandler(d1)
+		packetHandler(d2)
 	}
 }
