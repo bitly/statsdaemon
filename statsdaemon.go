@@ -515,7 +515,7 @@ func parseLine(line []byte) *Packet {
 			return nil
 		}
 	default:
-		log.Printf("ERROR: unrecognized type code %q for metric %s", typeCode, string(name))
+		log.Printf("ERROR: unrecognized type code %q for metric %s", typeCode, name)
 		return nil
 	}
 
