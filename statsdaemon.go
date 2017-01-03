@@ -598,8 +598,12 @@ func parseLine(line []byte) *Packet {
 
 		value, err = strconv.ParseUint(s, 10, 64)
 		if err != nil {
-			log.Printf("ERROR: failed to ParseUint %s - %s", string(val), err)
-			return nil
+			valueFloat, err := strconv.ParseFloat(string(val), 64)
+			if err != nil {
+				log.Printf("ERROR: failed to ParseFloat for 'g' %s, %s - %s", name, string(val), err)
+				return nil
+			}
+			value = uint64(valueFloat)
 		}
 
 		value = GaugeData{rel, neg, value.(uint64)}
@@ -608,10 +612,9 @@ func parseLine(line []byte) *Packet {
 	case "ms":
 		value, err = strconv.ParseUint(string(val), 10, 64)
 		if err != nil {
-			log.Printf("WARN: failed to ParseUint %s, %s - %s", name, string(val), err)
 			valueFloat, err := strconv.ParseFloat(string(val), 64)
 			if err != nil {
-				log.Printf("ERROR: failed to ParseUint in float-workaround %s, %s - %s", name, string(val), err)
+				log.Printf("ERROR: failed to ParseFloat for 'ms' %s, %s - %s", name, string(val), err)
 				return nil
 			}
 			value = uint64(valueFloat)
