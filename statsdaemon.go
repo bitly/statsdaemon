@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -11,12 +12,15 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
+
+	"gopkg.in/inconshreveable/log15.v2"
 )
 
 const (
@@ -108,6 +112,9 @@ var (
 	counters        = make(map[string]float64)
 	gauges          = make(map[string]float64)
 	timers          = make(map[string]Float64Slice)
+	lastGaugeValue  = make(map[string]uint64)
+	timersFlags     = make(map[string]bool)
+	timersMetrics   = make(map[string]Metric)
 	countInactivity = make(map[string]int64)
 	sets            = make(map[string][]string)
 )
@@ -148,6 +155,13 @@ func packetHandler(s *Packet) {
 		if !ok {
 			var t Float64Slice
 			timers[s.Bucket] = t
+			for _, m := range config.Metrics {
+				if m.RegexpCompiled.MatchString(s.Bucket) {
+					timersFlags[s.Bucket] = true
+					timersMetrics[s.Bucket] = m
+					break
+				}
+			}
 		}
 		timers[s.Bucket] = append(timers[s.Bucket], s.ValFlt)
 	case "g":
@@ -299,6 +313,20 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 	for bucket, timer := range timers {
 		bucketWithoutPostfix := bucket[:len(bucket)-len(*postfix)]
 		num++
+		if _, ok := timersFlags[bucketWithoutPostfix]; !ok {
+			log15.Debug("No metrics are configured for this bucket. Maybe you need block with regexp '.*' in the end of config. Ignoring calculations & continuing.", "bucket", bucketWithoutPostfix)
+			continue
+		}
+
+		var percentiles Percentiles
+		metric, metricExists := timersMetrics[bucketWithoutPostfix]
+		if metricExists {
+			percent := Percentiles{}
+			for _, percThr := range metric.PercentThresholds {
+				percent = append(percent, &Percentile{percThr, strconv.Itoa(int(percThr))})
+			}
+			percentiles = percent
+		}
 
 		sort.Sort(timer)
 		min := timer[0]
@@ -306,13 +334,23 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 		maxAtThreshold := max
 		count := len(timer)
 
+		var violationsCount int
 		sum := float64(0)
 		for _, value := range timer {
 			sum += value
+			if metricExists && value > metric.Threshold {
+				violationsCount++
+			}
 		}
 		mean := sum / float64(len(timer))
 
-		for _, pct := range pctls {
+		sumF := float64(0)
+		for _, value := range timer {
+			sumF += math.Pow(value-mean, 2.0)
+		}
+		stDeviation := math.Sqrt(sumF / float64(len(timer)))
+
+		for _, pct := range percentiles {
 			if len(timer) > 1 {
 				var abs float64
 				if pct.float >= 0 {
@@ -326,6 +364,9 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 				if pct.float >= 0 {
 					indexOfPerc -= 1 // index offset=0
 				}
+				if indexOfPerc < 0 {
+					indexOfPerc = 0
+				}
 				maxAtThreshold = timer[indexOfPerc]
 			}
 
@@ -338,19 +379,37 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 				tmpl = "%s.lower_%s%s %s %d\n"
 				pctstr = pct.str[1:]
 			}
-			threshold_s := strconv.FormatFloat(maxAtThreshold, 'f', -1, 64)
-			fmt.Fprintf(buffer, tmpl, bucketWithoutPostfix, pctstr, *postfix, threshold_s, now)
+
+			if _, ok := timersFlags[bucketWithoutPostfix]; ok {
+				fmt.Fprintf(buffer, tmpl, bucketWithoutPostfix, pctstr, *postfix, maxAtThreshold, now)
+			}
 		}
 
 		mean_s := strconv.FormatFloat(mean, 'f', -1, 64)
-		max_s := strconv.FormatFloat(max, 'f', -1, 64)
-		min_s := strconv.FormatFloat(min, 'f', -1, 64)
+		fmt.Fprintf(buffer, "%s.mean%s %f %d\n", bucketWithoutPostfix, *postfix, mean_s, now)
 
-		fmt.Fprintf(buffer, "%s.mean%s %s %d\n", bucketWithoutPostfix, *postfix, mean_s, now)
-		fmt.Fprintf(buffer, "%s.upper%s %s %d\n", bucketWithoutPostfix, *postfix, max_s, now)
-		fmt.Fprintf(buffer, "%s.lower%s %s %d\n", bucketWithoutPostfix, *postfix, min_s, now)
-		fmt.Fprintf(buffer, "%s.count%s %d %d\n", bucketWithoutPostfix, *postfix, count, now)
-
+		if metricExists {
+			for _, funcName := range metric.Functions {
+				switch funcName {
+				case "std":
+					std_s := strconv.FormatFloat(stDeviation, 'f', -1, 64)
+					fmt.Fprintf(buffer, "%s.std%s %f %d\n", bucketWithoutPostfix, *postfix, std_s, now)
+				case "sum":
+					sum_s := strconv.FormatFloat(sum, 'f', -1, 64)
+					fmt.Fprintf(buffer, "%s.sum%s %d %d\n", bucketWithoutPostfix, *postfix, sum_s, now)
+				case "sla_violations":
+					fmt.Fprintf(buffer, "%s.sla_violations%s %d %d\n", bucketWithoutPostfix, *postfix, violationsCount, now)
+				case "upper":
+					max_s := strconv.FormatFloat(max, 'f', -1, 64)
+					fmt.Fprintf(buffer, "%s.upper%s %d %d\n", bucketWithoutPostfix, *postfix, max_s, now)
+				case "lower":
+					min_s := strconv.FormatFloat(min, 'f', -1, 64)
+					fmt.Fprintf(buffer, "%s.lower%s %d %d\n", bucketWithoutPostfix, *postfix, min_s, now)
+				case "count":
+					fmt.Fprintf(buffer, "%s.count%s %d %d\n", bucketWithoutPostfix, *postfix, count, now)
+				}
+			}
+		}
 		delete(timers, bucket)
 	}
 	return num
@@ -579,12 +638,41 @@ func tcpListener() {
 	}
 }
 
+type Metric struct {
+	Regexp            string         `json:"regexp"`
+	RegexpCompiled    *regexp.Regexp `json:"-"`
+	Threshold         float64        `json:"threshold"`
+	PercentThresholds []float64      `json:"percent-thresholds"`
+	CountPersistence  bool           `json:"count_persistence"`
+	Functions         []string       `json:"func"`
+}
+
+var config struct {
+	Metrics []Metric `json:"metrics"`
+}
+
 func main() {
 	flag.Parse()
 
 	if *showVersion {
 		fmt.Printf("statsdaemon v%s (built w/%s)\n", VERSION, runtime.Version())
 		return
+	}
+
+	file, err := os.Open("config.json")
+	if err != nil {
+		log15.Error("Error loading config", "err", err)
+		return
+	}
+	if err := json.NewDecoder(file).Decode(&config); err != nil {
+		log15.Error("couldn't parse config", "err", err)
+		return
+	}
+	for i, m := range config.Metrics {
+		compiled, err := regexp.Compile(m.Regexp)
+		if err == nil {
+			config.Metrics[i].RegexpCompiled = compiled
+		}
 	}
 
 	signalchan = make(chan os.Signal, 1)
