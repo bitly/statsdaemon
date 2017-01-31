@@ -350,12 +350,6 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 		}
 		stDeviation := math.Sqrt(sumF / float64(len(timer)))
 
-		medianPosition := int(math.Floor(float64((len(timer)+1)/2.0) + 0.5))
-		if medianPosition >= count {
-			medianPosition = count - 1
-		}
-		median := timer[medianPosition]
-
 		for _, pct := range percentiles {
 			if len(timer) > 1 {
 				var abs float64
@@ -647,7 +641,7 @@ func tcpListener() {
 type Metric struct {
 	Regexp            string         `json:"regexp"`
 	RegexpCompiled    *regexp.Regexp `json:"-"`
-	Threshold         uint64         `json:"threshold"`
+	Threshold         float64        `json:"threshold"`
 	PercentThresholds []float64      `json:"percent-thresholds"`
 	CountPersistence  bool           `json:"count_persistence"`
 	Functions         []string       `json:"func"`
