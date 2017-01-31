@@ -32,22 +32,17 @@ var signalchan chan os.Signal
 
 type Packet struct {
 	Bucket   string
-	Value    interface{}
+	ValFlt   float64
+	ValStr   string
 	Modifier string
 	Sampling float32
 }
 
-type GaugeData struct {
-	Relative bool
-	Negative bool
-	Value    uint64
-}
+type Float64Slice []float64
 
-type Uint64Slice []uint64
-
-func (s Uint64Slice) Len() int           { return len(s) }
-func (s Uint64Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-func (s Uint64Slice) Less(i, j int) bool { return s[i] < s[j] }
+func (s Float64Slice) Len() int           { return len(s) }
+func (s Float64Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s Float64Slice) Less(i, j int) bool { return s[i] < s[j] }
 
 type Percentiles []*Percentile
 type Percentile struct {
@@ -114,10 +109,10 @@ func init() {
 
 var (
 	In              = make(chan *Packet, MAX_UNPROCESSED_PACKETS)
-	counters        = make(map[string]int64)
-	gauges          = make(map[string]uint64)
+	counters        = make(map[string]float64)
+	gauges          = make(map[string]float64)
+	timers          = make(map[string]Float64Slice)
 	lastGaugeValue  = make(map[string]uint64)
-	timers          = make(map[string]Uint64Slice)
 	timersFlags     = make(map[string]bool)
 	timersMetrics   = make(map[string]Metric)
 	countInactivity = make(map[string]int64)
@@ -158,7 +153,7 @@ func packetHandler(s *Packet) {
 	case "ms":
 		_, ok := timers[s.Bucket]
 		if !ok {
-			var t Uint64Slice
+			var t Float64Slice
 			timers[s.Bucket] = t
 			for _, m := range config.Metrics {
 				if m.RegexpCompiled.MatchString(s.Bucket) {
@@ -168,29 +163,26 @@ func packetHandler(s *Packet) {
 				}
 			}
 		}
-		timers[s.Bucket] = append(timers[s.Bucket], s.Value.(uint64))
+		timers[s.Bucket] = append(timers[s.Bucket], s.ValFlt)
 	case "g":
 		gaugeValue, _ := gauges[s.Bucket]
 
-		gaugeData := s.Value.(GaugeData)
-		if gaugeData.Relative {
-			if gaugeData.Negative {
-				// subtract checking for -ve numbers
-				if gaugeData.Value > gaugeValue {
-					gaugeValue = 0
-				} else {
-					gaugeValue -= gaugeData.Value
-				}
+		if s.ValStr == "" {
+			gaugeValue = s.ValFlt
+		} else if s.ValStr == "+" {
+			// watch out for overflows
+			if s.ValFlt > (math.MaxFloat64 - gaugeValue) {
+				gaugeValue = math.MaxFloat64
 			} else {
-				// watch out for overflows
-				if gaugeData.Value > (math.MaxUint64 - gaugeValue) {
-					gaugeValue = math.MaxUint64
-				} else {
-					gaugeValue += gaugeData.Value
-				}
+				gaugeValue += s.ValFlt
 			}
-		} else {
-			gaugeValue = gaugeData.Value
+		} else if s.ValStr == "-" {
+			// subtract checking for negative numbers
+			if s.ValFlt > gaugeValue {
+				gaugeValue = 0
+			} else {
+				gaugeValue -= s.ValFlt
+			}
 		}
 
 		gauges[s.Bucket] = gaugeValue
@@ -199,13 +191,13 @@ func packetHandler(s *Packet) {
 		if !ok {
 			counters[s.Bucket] = 0
 		}
-		counters[s.Bucket] += int64(float64(s.Value.(int64)) * float64(1/s.Sampling))
+		counters[s.Bucket] += s.ValFlt * float64(1/s.Sampling)
 	case "s":
 		_, ok := sets[s.Bucket]
 		if !ok {
 			sets[s.Bucket] = make([]string, 0)
 		}
-		sets[s.Bucket] = append(sets[s.Bucket], s.Value.(string))
+		sets[s.Bucket] = append(sets[s.Bucket], s.ValStr)
 	}
 }
 
@@ -270,14 +262,14 @@ func processCounters(buffer *bytes.Buffer, now int64) int64 {
 	var num int64
 	// continue sending zeros for counters for a short period of time even if we have no new data
 	for bucket, value := range counters {
-		fmt.Fprintf(buffer, "%s %d %d\n", bucket, value, now)
+		fmt.Fprintf(buffer, "%s %s %d\n", bucket, strconv.FormatFloat(value, 'f', -1, 64), now)
 		delete(counters, bucket)
 		countInactivity[bucket] = 0
 		num++
 	}
 	for bucket, purgeCount := range countInactivity {
 		if purgeCount > 0 {
-			fmt.Fprintf(buffer, "%s %d %d\n", bucket, 0, now)
+			fmt.Fprintf(buffer, "%s 0 %d\n", bucket, now)
 			num++
 		}
 		countInactivity[bucket] += 1
@@ -291,26 +283,11 @@ func processCounters(buffer *bytes.Buffer, now int64) int64 {
 func processGauges(buffer *bytes.Buffer, now int64) int64 {
 	var num int64
 
-	for bucket, gauge := range gauges {
-		currentValue := gauge
-		lastValue, hasLastValue := lastGaugeValue[bucket]
-		var hasChanged bool
-
-		if gauge != math.MaxUint64 {
-			hasChanged = true
-		}
-
-		switch {
-		case hasChanged:
-			fmt.Fprintf(buffer, "%s %d %d\n", bucket, currentValue, now)
-			lastGaugeValue[bucket] = currentValue
-			gauges[bucket] = math.MaxUint64
-			num++
-		case hasLastValue && !hasChanged && !*deleteGauges:
-			fmt.Fprintf(buffer, "%s %d %d\n", bucket, lastValue, now)
-			num++
-		default:
-			continue
+	for bucket, currentValue := range gauges {
+		fmt.Fprintf(buffer, "%s %s %d\n", bucket, strconv.FormatFloat(currentValue, 'f', -1, 64), now)
+		num++
+		if *deleteGauges {
+			delete(gauges, bucket)
 		}
 	}
 	return num
@@ -358,18 +335,18 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 		count := len(timer)
 
 		var violationsCount int
-		sum := uint64(0)
+		sum := float64(0)
 		for _, value := range timer {
 			sum += value
 			if metricExists && value > metric.Threshold {
 				violationsCount++
 			}
 		}
-		mean := float64(sum) / float64(len(timer))
+		mean := sum / float64(len(timer))
 
 		sumF := float64(0)
 		for _, value := range timer {
-			sumF += math.Pow(float64(value)-mean, 2.0)
+			sumF += math.Pow(value-mean, 2.0)
 		}
 		stDeviation := math.Sqrt(sumF / float64(len(timer)))
 
@@ -402,10 +379,10 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 			var tmpl string
 			var pctstr string
 			if pct.float >= 0 {
-				tmpl = "%s.upper_%s%s %d %d\n"
+				tmpl = "%s.upper_%s%s %s %d\n"
 				pctstr = pct.str
 			} else {
-				tmpl = "%s.lower_%s%s %d %d\n"
+				tmpl = "%s.lower_%s%s %s %d\n"
 				pctstr = pct.str[1:]
 			}
 
@@ -414,29 +391,31 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 			}
 		}
 
-		fmt.Fprintf(buffer, "%s.mean%s %f %d\n", bucketWithoutPostfix, *postfix, mean, now)
+		mean_s := strconv.FormatFloat(mean, 'f', -1, 64)
+		fmt.Fprintf(buffer, "%s.mean%s %f %d\n", bucketWithoutPostfix, *postfix, mean_s, now)
 
 		if metricExists {
 			for _, funcName := range metric.Functions {
 				switch funcName {
-				case "median":
-					fmt.Fprintf(buffer, "%s.median%s %d %d\n", bucketWithoutPostfix, *postfix, median, now)
 				case "std":
-					fmt.Fprintf(buffer, "%s.std%s %f %d\n", bucketWithoutPostfix, *postfix, stDeviation, now)
+					std_s := strconv.FormatFloat(stDeviation, 'f', -1, 64)
+					fmt.Fprintf(buffer, "%s.std%s %f %d\n", bucketWithoutPostfix, *postfix, std_s, now)
 				case "sum":
-					fmt.Fprintf(buffer, "%s.sum%s %d %d\n", bucketWithoutPostfix, *postfix, sum, now)
+					sum_s := strconv.FormatFloat(sum, 'f', -1, 64)
+					fmt.Fprintf(buffer, "%s.sum%s %d %d\n", bucketWithoutPostfix, *postfix, sum_s, now)
 				case "sla_violations":
 					fmt.Fprintf(buffer, "%s.sla_violations%s %d %d\n", bucketWithoutPostfix, *postfix, violationsCount, now)
 				case "upper":
-					fmt.Fprintf(buffer, "%s.upper%s %d %d\n", bucketWithoutPostfix, *postfix, max, now)
+					max_s := strconv.FormatFloat(max, 'f', -1, 64)
+					fmt.Fprintf(buffer, "%s.upper%s %d %d\n", bucketWithoutPostfix, *postfix, max_s, now)
 				case "lower":
-					fmt.Fprintf(buffer, "%s.lower%s %d %d\n", bucketWithoutPostfix, *postfix, min, now)
+					min_s := strconv.FormatFloat(min, 'f', -1, 64)
+					fmt.Fprintf(buffer, "%s.lower%s %d %d\n", bucketWithoutPostfix, *postfix, min_s, now)
 				case "count":
 					fmt.Fprintf(buffer, "%s.count%s %d %d\n", bucketWithoutPostfix, *postfix, count, now)
 				}
 			}
 		}
-
 		delete(timers, bucket)
 	}
 	return num
@@ -566,58 +545,39 @@ func parseLine(line []byte) *Packet {
 	}
 
 	var (
-		err   error
-		value interface{}
+		err      error
+		floatval float64
+		strval   string
 	)
 
 	switch typeCode {
 	case "c":
-		value, err = strconv.ParseInt(string(val), 10, 64)
+		floatval, err = strconv.ParseFloat(string(val), 64)
 		if err != nil {
-			log.Printf("ERROR: failed to ParseInt %s - %s", string(val), err)
+			log.Printf("ERROR: failed to ParseFloat %s - %s", string(val), err)
 			return nil
 		}
 	case "g":
-		var rel, neg bool
 		var s string
 
-		switch val[0] {
-		case '+':
-			rel = true
-			neg = false
+		if val[0] == '+' || val[0] == '-' {
+			strval = string(val[0])
 			s = string(val[1:])
-		case '-':
-			rel = true
-			neg = true
-			s = string(val[1:])
-		default:
-			rel = false
-			neg = false
+		} else {
 			s = string(val)
 		}
-
-		value, err = strconv.ParseUint(s, 10, 64)
+		floatval, err = strconv.ParseFloat(s, 64)
 		if err != nil {
-			valueFloat, err := strconv.ParseFloat(string(val), 64)
-			if err != nil {
-				log.Printf("ERROR: failed to ParseFloat for 'g' %s, %s - %s", name, string(val), err)
-				return nil
-			}
-			value = uint64(valueFloat)
+			log.Printf("ERROR: failed to ParseFloat %s - %s", string(val), err)
+			return nil
 		}
-
-		value = GaugeData{rel, neg, value.(uint64)}
 	case "s":
-		value = string(val)
+		strval = string(val)
 	case "ms":
-		value, err = strconv.ParseUint(string(val), 10, 64)
+		floatval, err = strconv.ParseFloat(string(val), 64)
 		if err != nil {
-			valueFloat, err := strconv.ParseFloat(string(val), 64)
-			if err != nil {
-				log.Printf("ERROR: failed to ParseFloat for 'ms' %s, %s - %s", name, string(val), err)
-				return nil
-			}
-			value = uint64(valueFloat)
+			log.Printf("ERROR: failed to ParseFloat %s - %s", string(val), err)
+			return nil
 		}
 	default:
 		log.Printf("ERROR: unrecognized type code %q", typeCode)
@@ -626,7 +586,8 @@ func parseLine(line []byte) *Packet {
 
 	return &Packet{
 		Bucket:   sanitizeBucket(*prefix + string(name) + *postfix),
-		Value:    value,
+		ValFlt:   floatval,
+		ValStr:   strval,
 		Modifier: typeCode,
 		Sampling: sampling,
 	}

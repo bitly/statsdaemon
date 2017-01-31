@@ -1,26 +1,27 @@
-#!/bin/bash
-
+#!/bin/sh
 # build binary distributions for linux/amd64 and darwin/amd64
-set -e
+set -eu
 
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$(dirname "$0")"
+DIR=$(pwd)
 echo "working dir $DIR"
 mkdir -p $DIR/dist
 
 arch=$(go env GOARCH)
-version=$(cat $DIR/version.go | grep "const VERSION" | awk '{print $NF}' | sed 's/"//g')
+version=$(awk '/const VERSION/ {print $NF}' $DIR/version.go | sed 's/"//g')
 goversion=$(go version | awk '{print $3}')
 
 echo "... running tests"
-./test.sh || exit 1
+./test.sh
 
-for os in linux darwin; do
+for os in linux darwin freebsd; do
     echo "... building v$version for $os/$arch"
-    BUILD=$(mktemp -d -t statsdaemon.XXXXXXXX)
+    BUILD=$(mktemp -d ${TMPDIR:-/tmp}/statsdaemon.XXXXXX)
     TARGET="statsdaemon-$version.$os-$arch.$goversion"
-    GOOS=$os GOARCH=$arch CGO_ENABLED=0 go build -o $BUILD/$TARGET/statsdaemon || exit 1
-    pushd $BUILD
+    GOOS=$os GOARCH=$arch CGO_ENABLED=0 go build -o $BUILD/$TARGET/statsdaemon
+    cd $BUILD
     tar czvf $TARGET.tar.gz $TARGET
     mv $TARGET.tar.gz $DIR/dist
-    popd
+    cd $DIR
+    rm -r $BUILD
 done
