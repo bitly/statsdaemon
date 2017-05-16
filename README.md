@@ -75,7 +75,7 @@ $ docker stack deploy -c docker-compose.yml $(basename ${PWD})
 Creating service statsdaemon_frontend
 Creating service statsdaemon_influxdb
 ```
-After a couple of seconds grafana4 is available under [localhost:3000](http://localhost:3000).
+After a couple of seconds grafana4 is available under [localhost:3000](http://localhost:3000) (admin/admin).
 
 Now start the statsdaemon...
 
