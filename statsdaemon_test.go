@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bmizerany/assert"
+	"github.com/stretchr/testify/assert"
 )
 
 var commonPercentiles = Percentiles{
