@@ -1,7 +1,7 @@
 language: go
 sudo: false
 install:
-  - go get github.com/bmizerany/assert
+  - go get github.com/stretchr/testify
 script:
   - ./test.sh
 notifications:
