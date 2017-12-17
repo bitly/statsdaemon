@@ -4,14 +4,15 @@ statsdaemon
 Port of Etsy's statsd (https://github.com/etsy/statsd), written in Go (originally based
 on [amir/gographite](https://github.com/amir/gographite)).
 
-Supports
+Supports:
 
 * Timing (with optional percentiles)
 * Counters (positive and negative with optional sampling)
 * Gauges (including relative operations)
 * Sets
 
-Note: Only integers are supported for metric values.
+Initially only integers were supported for metric values,
+but now double-precision floating-point is supported.
 
 [![Build Status](https://secure.travis-ci.org/bitly/statsdaemon.png)](http://travis-ci.org/bitly/statsdaemon)
 
