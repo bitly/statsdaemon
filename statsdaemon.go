@@ -540,8 +540,15 @@ func parseLine(line []byte) *Packet {
 	case "c":
 		value, err = strconv.ParseInt(string(val), 10, 64)
 		if err != nil {
-			log.Printf("ERROR: failed to ParseInt %s - %s", string(val), err)
-			return nil
+			//try to strip ".0" if being sent that way (overops send it like that :( )
+			if (strings.HasSuffix(val, ".0")) {
+				value, err = strconv.ParseInt(strings.TrimSuffix(val,".0"), 10, 64)	
+			}
+			if (err != nil) {
+				log.Printf("ERROR: failed to ParseInt %s - %s", string(val), err)
+				return nil
+			}
+			
 		}
 		stattype = "counters."
 	case "g":
