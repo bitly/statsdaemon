@@ -541,8 +541,8 @@ func parseLine(line []byte) *Packet {
 		value, err = strconv.ParseInt(string(val), 10, 64)
 		if err != nil {
 			//try to strip ".0" if being sent that way (overops send it like that :( )
-			if (strings.HasSuffix(val, ".0")) {
-				value, err = strconv.ParseInt(strings.TrimSuffix(val,".0"), 10, 64)	
+			if (strings.HasSuffix(string(val), ".0")) {
+				value, err = strconv.ParseInt(strings.TrimSuffix(string(val),".0"), 10, 64)	
 			}
 			if (err != nil) {
 				log.Printf("ERROR: failed to ParseInt %s - %s", string(val), err)
