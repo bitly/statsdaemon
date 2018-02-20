@@ -540,13 +540,13 @@ func parseLine(line []byte) *Packet {
 	case "c":
 		value, err = strconv.ParseInt(string(val), 10, 64)
 		if err != nil {
-			//try to strip ".0" if being sent that way (overops send it like that :( )
-			if (strings.HasSuffix(string(val), ".0")) {
-				value, err = strconv.ParseInt(strings.TrimSuffix(string(val),".0"), 10, 64)	
-			}
+			//try to round a float
+			value, err = round(strconv.ParseFloat(string(val), 64))
 			if (err != nil) {
-				log.Printf("ERROR: failed to ParseInt %s - %s", string(val), err)
+				log.Printf("ERROR: failed to Parse %s - %s", string(val), err)
 				return nil
+			} else {
+				value = round(value.(float64))
 			}
 			
 		}
@@ -599,6 +599,11 @@ func parseLine(line []byte) *Packet {
 		Modifier: typeCode,
 		Sampling: sampling,
 	}
+}
+
+func round(val float64) int {
+    if val < 0 { return int(val-0.5) }
+    return int(val+0.5)
 }
 
 func logParseFail(line []byte) {
