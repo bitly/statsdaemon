@@ -541,7 +541,7 @@ func parseLine(line []byte) *Packet {
 		value, err = strconv.ParseInt(string(val), 10, 64)
 		if err != nil {
 			//try to round a float
-			value, err = round(strconv.ParseFloat(string(val), 64))
+			value, err = strconv.ParseFloat(string(val), 64)
 			if (err != nil) {
 				log.Printf("ERROR: failed to Parse %s - %s", string(val), err)
 				return nil
