@@ -21,6 +21,37 @@ var commonPercentiles = Percentiles{
 	},
 }
 
+type TestUdpReader struct {
+	Pattern []byte
+}
+
+func (r *TestUdpReader) Read(p []byte) (int, error) {
+	return copy(p, r.Pattern), nil
+}
+
+type TestTcpReader struct {
+	Pattern  []byte
+	ReadSize int
+	off      int
+}
+
+func (r *TestTcpReader) Read(p []byte) (int, error) {
+	poff := 0
+	end := r.ReadSize
+	if end > len(p) {
+		end = len(p)
+	}
+	for poff < end {
+		c := copy(p[poff:end], r.Pattern[r.off:])
+		poff += c
+		r.off += c
+		if r.off == len(r.Pattern) {
+			r.off = 0
+		}
+	}
+	return end, nil
+}
+
 func TestParseLineGauge(t *testing.T) {
 	d := []byte("gaugor:333|g")
 	packet := parseLine(d)
@@ -294,6 +325,10 @@ func TestMultiLine(t *testing.T) {
 	b := bytes.NewBuffer([]byte("a.key.with-0.dash:4|c\ngauge:3|g"))
 	parser := NewParser(b, true)
 
+	checkTwoPackets(t, parser, false)
+}
+
+func checkTwoPackets(t *testing.T, parser *MsgParser, inf bool) {
 	packet, more := parser.Next()
 	assert.NotEqual(t, packet, nil)
 	assert.Equal(t, more, true)
@@ -304,12 +339,31 @@ func TestMultiLine(t *testing.T) {
 
 	packet, more = parser.Next()
 	assert.NotEqual(t, packet, nil)
-	assert.Equal(t, more, false)
+	assert.Equal(t, more, inf)
 	assert.Equal(t, "gauge", packet.Bucket)
 	assert.Equal(t, 3.0, packet.ValFlt)
 	assert.Equal(t, "", packet.ValStr)
 	assert.Equal(t, "g", packet.Modifier)
 	assert.Equal(t, float32(1), packet.Sampling)
+}
+
+func TestMultiUdp(t *testing.T) {
+	r := &TestUdpReader{[]byte("a.key.with-0.dash:4|c\ngauge:3|g")}
+	parser := NewParser(r, false)
+
+	checkTwoPackets(t, parser, true)
+	checkTwoPackets(t, parser, true)
+	checkTwoPackets(t, parser, true)
+}
+
+func TestMultiTcp(t *testing.T) {
+	// reads 16 bytes at a time
+	r := &TestTcpReader{[]byte("a.key.with-0.dash:4|c\ngauge:3|g\n"), 16, 0}
+	parser := NewParser(r, true)
+
+	checkTwoPackets(t, parser, true)
+	checkTwoPackets(t, parser, true)
+	checkTwoPackets(t, parser, true)
 }
 
 func TestPacketHandlerReceiveCounter(t *testing.T) {
@@ -745,6 +799,41 @@ func BenchmarkLotsOfTimers(t *testing.B) {
 	var buff bytes.Buffer
 	t.ResetTimer()
 	processTimers(&buff, time.Now().Unix(), commonPercentiles)
+}
+
+func BenchmarkMsgParserUDP(b *testing.B) {
+	r := &TestUdpReader{[]byte("a.key.with-0.dash:4|c\ngauge.with.longish.nameofserver:3|g")}
+	parser := NewParser(r, false)
+
+	for i := 0; i < b.N; i++ {
+		packet, more := parser.Next()
+		if more == false || packet == nil || packet.Modifier != "c" {
+			b.Fail()
+		}
+
+		packet, more = parser.Next()
+		if more == false || packet == nil || packet.Modifier != "g" {
+			b.Fail()
+		}
+	}
+}
+
+func BenchmarkMsgParserTCP(b *testing.B) {
+	// reads 16 bytes at a time
+	r := &TestTcpReader{[]byte("a.key.with-0.dash:4|c\ngauge.with.longish.nameofserver:3|g\n"), 1500, 0}
+	parser := NewParser(r, true)
+
+	for i := 0; i < b.N; i++ {
+		packet, more := parser.Next()
+		if more == false || packet == nil || packet.Modifier != "c" {
+			b.Fail()
+		}
+
+		packet, more = parser.Next()
+		if more == false || packet == nil || packet.Modifier != "g" {
+			b.Fail()
+		}
+	}
 }
 
 func BenchmarkParseLineCounter(b *testing.B) {
