@@ -61,31 +61,36 @@ func (a *Percentiles) String() string {
 	return fmt.Sprintf("%v", *a)
 }
 
-func sanitizeBucket(bucket string) string {
-	b := make([]byte, len(bucket))
+func sanitizeBucket(bucket []byte) string {
 	var bl int
 
 	for i := 0; i < len(bucket); i++ {
 		c := bucket[i]
 		switch {
-		case (c >= byte('a') && c <= byte('z')) || (c >= byte('A') && c <= byte('Z')) || (c >= byte('0') && c <= byte('9')) || c == byte('-') || c == byte('.') || c == byte('_'):
-			b[bl] = c
+		case c >= byte('a') && c <= byte('z'):
+			fallthrough
+		case c >= byte('A') && c <= byte('Z'):
+			fallthrough
+		case c >= byte('0') && c <= byte('9'):
+			fallthrough
+		case c == byte('-') || c == byte('.') || c == byte('_'):
+			bucket[bl] = c
 			bl++
 		case c == byte(' '):
-			b[bl] = byte('_')
+			bucket[bl] = byte('_')
 			bl++
 		case c == byte('/'):
-			b[bl] = byte('-')
+			bucket[bl] = byte('-')
 			bl++
 		}
 	}
-	return string(b[:bl])
+	return string(bucket[:bl])
 }
 
 var (
 	serviceAddress    = flag.String("address", ":8125", "UDP service address")
 	tcpServiceAddress = flag.String("tcpaddr", "", "TCP service address, if set")
-	maxUdpPacketSize  = flag.Int64("max-udp-packet-size", 1472, "Maximum UDP packet size")
+	maxUdpPacketSize  = flag.Int("max-udp-packet-size", 1472, "Maximum UDP packet size")
 	graphiteAddress   = flag.String("graphite", "127.0.0.1:2003", "Graphite service address (or - to disable)")
 	flushInterval     = flag.Int64("flush-interval", 10, "Flush interval (seconds)")
 	debug             = flag.Bool("debug", false, "print statistics sent to graphite")
@@ -358,13 +363,19 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 
 type MsgParser struct {
 	reader       io.Reader
+	newbuf       []byte
 	buffer       []byte
 	partialReads bool
 	done         bool
 }
 
 func NewParser(reader io.Reader, partialReads bool) *MsgParser {
-	return &MsgParser{reader, []byte{}, partialReads, false}
+	bufsz := *maxUdpPacketSize
+	if partialReads {
+		bufsz = TCP_READ_SIZE
+	}
+	newbuf := make([]byte, bufsz)
+	return &MsgParser{reader, newbuf, newbuf[:0], partialReads, false}
 }
 
 func (mp *MsgParser) Next() (*Packet, bool) {
@@ -379,23 +390,21 @@ func (mp *MsgParser) Next() (*Packet, bool) {
 		}
 
 		if mp.done {
-			return parseLine(rest), false
+			if len(rest) > 0 {
+				return parseLine(rest), false
+			}
+			return nil, false
 		}
 
-		idx := len(buf)
-		end := idx
-		if mp.partialReads {
-			end += TCP_READ_SIZE
-		} else {
-			end += int(*maxUdpPacketSize)
+		// for udp, each message independent
+		// for tcp, copy to front and append
+		// unless no '\n' in entire TCP_READ_SIZE
+		idx := 0
+		if mp.partialReads && len(buf) < TCP_READ_SIZE {
+			idx = len(buf)
+			copy(mp.newbuf, buf)
 		}
-		if cap(buf) >= end {
-			buf = buf[:end]
-		} else {
-			tmp := buf
-			buf = make([]byte, end)
-			copy(buf, tmp)
-		}
+		buf = mp.newbuf
 
 		n, err := mp.reader.Read(buf[idx:])
 		buf = buf[:idx+n]
@@ -403,28 +412,15 @@ func (mp *MsgParser) Next() (*Packet, bool) {
 			if err != io.EOF {
 				log.Printf("ERROR: %s", err)
 			}
-
 			mp.done = true
-
-			line, rest = mp.lineFrom(buf)
-			if line != nil {
-				mp.buffer = rest
-				return parseLine(line), len(rest) > 0
-			}
-
-			if len(rest) > 0 {
-				return parseLine(rest), false
-			}
-
-			return nil, false
 		}
 	}
 }
 
 func (mp *MsgParser) lineFrom(input []byte) ([]byte, []byte) {
-	split := bytes.SplitAfterN(input, []byte("\n"), 2)
+	split := bytes.SplitN(input, []byte("\n"), 2)
 	if len(split) == 2 {
-		return split[0][:len(split[0])-1], split[1]
+		return split[0], split[1]
 	}
 
 	if !mp.partialReads {
@@ -434,10 +430,7 @@ func (mp *MsgParser) lineFrom(input []byte) ([]byte, []byte) {
 		return input, []byte{}
 	}
 
-	if bytes.HasSuffix(input, []byte("\n")) {
-		return input[:len(input)-1], []byte{}
-	}
-
+	// if input ended in '\n' then len(split) == 2 and returned above
 	return nil, input
 }
 
@@ -452,7 +445,7 @@ func parseLine(line []byte) *Packet {
 	typeCode := string(split[1])
 
 	sampling := float32(1)
-	if strings.HasPrefix(typeCode, "c") || strings.HasPrefix(typeCode, "ms") {
+	if typeCode == "c" || typeCode == "ms" {
 		if len(split) == 3 && len(split[2]) > 0 && split[2][0] == '@' {
 			f64, err := strconv.ParseFloat(string(split[2][1:]), 32)
 			if err != nil {
@@ -472,7 +465,7 @@ func parseLine(line []byte) *Packet {
 		logParseFail(line)
 		return nil
 	}
-	name := string(split[0])
+	name := split[0]
 	val := split[1]
 	if len(val) == 0 {
 		logParseFail(line)
@@ -515,12 +508,12 @@ func parseLine(line []byte) *Packet {
 			return nil
 		}
 	default:
-		log.Printf("ERROR: unrecognized type code %q for metric %s", typeCode, name)
+		log.Printf("ERROR: unrecognized type code %q for metric %q", typeCode, name)
 		return nil
 	}
 
 	return &Packet{
-		Bucket:   sanitizeBucket(*prefix + string(name) + *postfix),
+		Bucket:   *prefix + sanitizeBucket(name) + *postfix,
 		ValFlt:   floatval,
 		ValStr:   strval,
 		Modifier: typeCode,
@@ -586,6 +579,8 @@ func main() {
 		fmt.Printf("statsdaemon v%s (built w/%s)\n", VERSION, runtime.Version())
 		return
 	}
+	*prefix = sanitizeBucket([]byte(*prefix))
+	*postfix = sanitizeBucket([]byte(*postfix))
 
 	signalchan = make(chan os.Signal, 1)
 	signal.Notify(signalchan, syscall.SIGTERM)
