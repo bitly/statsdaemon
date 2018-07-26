@@ -590,8 +590,14 @@ func parseLine(line []byte) *Packet {
 	case "ms":
 		value, err = strconv.ParseUint(string(val), 10, 64)
 		if err != nil {
-			log.Printf("ERROR: failed to ParseUint %s - %s", string(val), err)
-			return nil
+			//try to round a float
+			value, err = strconv.ParseFloat(string(val), 64)
+			if (err != nil) {
+				log.Printf("ERROR: failed to Parse (type ms): %s - %s", string(val), err)
+				return nil
+			} else {
+				value = rounduint64(value.(float64))
+			}
 		}
 		stattype = "timers."
 	default:
