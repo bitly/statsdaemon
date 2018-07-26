@@ -543,7 +543,7 @@ func parseLine(line []byte) *Packet {
 			//try to round a float
 			value, err = strconv.ParseFloat(string(val), 64)
 			if (err != nil) {
-				log.Printf("ERROR: failed to Parse %s - %s", string(val), err)
+				log.Printf("ERROR: failed to Parse (type c): %s - %s", string(val), err)
 				return nil
 			} else {
 				value = round(value.(float64))
@@ -572,8 +572,14 @@ func parseLine(line []byte) *Packet {
 
 		value, err = strconv.ParseUint(s, 10, 64)
 		if err != nil {
-			log.Printf("ERROR: failed to ParseUint %s - %s", string(val), err)
-			return nil
+			//try to round a float
+			value, err = strconv.ParseFloat(string(val), 64)
+			if (err != nil) {
+				log.Printf("ERROR: failed to Parse (type g): %s - %s", string(val), err)
+				return nil
+			} else {
+				value = round(value.(float64))
+			}
 		}
 
 		value = GaugeData{rel, neg, value.(uint64)}
