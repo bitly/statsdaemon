@@ -578,7 +578,7 @@ func parseLine(line []byte) *Packet {
 				log.Printf("ERROR: failed to Parse (type g): %s - %s", string(val), err)
 				return nil
 			} else {
-				value = round(value.(float64))
+				value = rounduint64(value.(float64))
 			}
 		}
 
@@ -610,6 +610,11 @@ func parseLine(line []byte) *Packet {
 func round(val float64) int64 {
     if val < 0 { return int64(val-0.5) }
     return int64(val+0.5)
+}
+
+func rounduint64(val float64) uint64 {
+    if val < 0 { return uint64(val-0.5) }
+    return uint64(val+0.5)
 }
 
 func logParseFail(line []byte) {
