@@ -583,7 +583,7 @@ func main() {
 	*postfix = sanitizeBucket([]byte(*postfix))
 
 	signalchan = make(chan os.Signal, 1)
-	signal.Notify(signalchan, syscall.SIGTERM)
+	signal.Notify(signalchan, syscall.SIGTERM, syscall.SIGINT)
 
 	go udpListener()
 	if *tcpServiceAddress != "" {
