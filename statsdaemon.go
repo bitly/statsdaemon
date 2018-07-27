@@ -149,26 +149,14 @@ func packetHandler(s *Packet) {
 		// if missing gets nil []float64, works with append()
 		timers[s.Bucket] = append(timers[s.Bucket], s.ValFlt)
 	case "g":
-		gaugeValue, _ := gauges[s.Bucket]
-
+		var gaugeValue float64
 		if s.ValStr == "" {
 			gaugeValue = s.ValFlt
 		} else if s.ValStr == "+" {
-			// watch out for overflows
-			if s.ValFlt > (math.MaxFloat64 - gaugeValue) {
-				gaugeValue = math.MaxFloat64
-			} else {
-				gaugeValue += s.ValFlt
-			}
+			gaugeValue = gauges[s.Bucket] + s.ValFlt
 		} else if s.ValStr == "-" {
-			// subtract checking for negative numbers
-			if s.ValFlt > gaugeValue {
-				gaugeValue = 0
-			} else {
-				gaugeValue -= s.ValFlt
-			}
+			gaugeValue = gauges[s.Bucket] - s.ValFlt
 		}
-
 		gauges[s.Bucket] = gaugeValue
 	case "c":
 		counters[s.Bucket] += s.ValFlt / float64(s.Sampling)

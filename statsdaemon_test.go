@@ -433,14 +433,14 @@ func TestPacketHandlerGauge(t *testing.T) {
 	packetHandler(p)
 	assert.Equal(t, gauges["gaugor"], float64(327))
 
-	// <0 overflow
+	// going negative
 	p.ValFlt = 10
 	p.ValStr = ""
 	packetHandler(p)
 	p.ValFlt = 20
 	p.ValStr = "-"
 	packetHandler(p)
-	assert.Equal(t, gauges["gaugor"], float64(0))
+	assert.Equal(t, gauges["gaugor"], float64(-10))
 
 	// >MaxFloat64 overflow
 	p.ValFlt = float64(math.MaxFloat64 - 10)
