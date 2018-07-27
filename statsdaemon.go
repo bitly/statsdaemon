@@ -97,6 +97,7 @@ var (
 	showVersion       = flag.Bool("version", false, "print version string")
 	deleteGauges      = flag.Bool("delete-gauges", true, "don't send values to graphite for inactive gauges, as opposed to sending the previous value")
 	persistCountKeys  = flag.Uint("persist-count-keys", 60, "number of flush-intervals to persist count keys (at zero)")
+	persistTimerKeys  = flag.Uint("persist-timer-counts", 0, "number of flush-intervals to persist timer count keys (at zero)")
 	receiveCounter    = flag.String("receive-counter", "", "Metric name for total metrics received per interval")
 	percentThreshold  = Percentiles{}
 	prefix            = flag.String("prefix", "", "Prefix for all stats")
@@ -116,6 +117,7 @@ var (
 	timers          = make(map[string]Float64Slice)
 	sets            = make(map[string][]string)
 	inactivCounters = make(map[string]uint)
+	inactivTimers   = make(map[string]uint)
 )
 
 func monitor() {
@@ -144,8 +146,14 @@ func packetHandler(s *Packet) {
 
 	switch s.Modifier {
 	case "ms":
-		// if missing gets nil []float64, works with append()
-		timers[s.Bucket] = append(timers[s.Bucket], s.ValFlt)
+		vals := timers[s.Bucket]
+		if vals == nil {
+			vals = make([]float64, 1, 5)
+			vals[0] = 0.0
+		}
+		// first slot is sampled count, following are times
+		vals[0] += float64(1 / s.Sampling)
+		timers[s.Bucket] = append(vals, s.ValFlt)
 	case "g":
 		var gaugeValue float64
 		if s.ValStr == "" {
@@ -290,8 +298,12 @@ func processSets(buffer *bytes.Buffer, now int64) int64 {
 
 func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 	var num int64
+	persist := *persistTimerKeys
+
 	for bucket, timer := range timers {
 		num++
+		sampled := timer[0]
+		timer = timer[1:]
 
 		sort.Sort(timer)
 		min := timer[0]
@@ -336,13 +348,31 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 		mean_s := strconv.FormatFloat(mean, 'f', -1, 64)
 		max_s := strconv.FormatFloat(max, 'f', -1, 64)
 		min_s := strconv.FormatFloat(min, 'f', -1, 64)
+		count_s := strconv.FormatFloat(sampled, 'f', -1, 64)
 
 		fmt.Fprintf(buffer, "%s%s.mean%s %s %d\n", *prefix, bucket, *postfix, mean_s, now)
 		fmt.Fprintf(buffer, "%s%s.upper%s %s %d\n", *prefix, bucket, *postfix, max_s, now)
 		fmt.Fprintf(buffer, "%s%s.lower%s %s %d\n", *prefix, bucket, *postfix, min_s, now)
-		fmt.Fprintf(buffer, "%s%s.count%s %d %d\n", *prefix, bucket, *postfix, count, now)
+		fmt.Fprintf(buffer, "%s%s.count%s %s %d\n", *prefix, bucket, *postfix, count_s, now)
 
 		delete(timers, bucket)
+		if persist > 0 {
+			countKey := fmt.Sprintf("%s%s.count%s", *prefix, bucket, *postfix)
+			inactivTimers[countKey] = 0
+		}
+	}
+
+	// continue sending zeros for no-longer-active timer counts for configured flush-intervals
+	for bucket, purgeCount := range inactivTimers {
+		if purgeCount > 0 {
+			fmt.Fprintf(buffer, "%s 0 %d\n", bucket, now)
+			num++
+		}
+		if purgeCount >= persist {
+			delete(inactivTimers, bucket)
+		} else {
+			inactivTimers[bucket] = purgeCount + 1
+		}
 	}
 	return num
 }

@@ -458,13 +458,15 @@ func TestPacketHandlerTimer(t *testing.T) {
 		Sampling: float32(1),
 	}
 	packetHandler(p)
-	assert.Equal(t, len(timers["glork"]), 1)
-	assert.Equal(t, timers["glork"][0], float64(320))
+	assert.Equal(t, len(timers["glork"]), 2)
+	assert.Equal(t, timers["glork"][0], float64(1))
+	assert.Equal(t, timers["glork"][1], float64(320))
 
 	p.ValFlt = float64(100)
 	packetHandler(p)
-	assert.Equal(t, len(timers["glork"]), 2)
-	assert.Equal(t, timers["glork"][1], float64(100))
+	assert.Equal(t, len(timers["glork"]), 3)
+	assert.Equal(t, timers["glork"][0], float64(2))
+	assert.Equal(t, timers["glork"][2], float64(100))
 }
 
 func TestPacketHandlerSet(t *testing.T) {
@@ -545,7 +547,7 @@ func TestProcessCountersPrefix(t *testing.T) {
 func TestProcessTimers(t *testing.T) {
 	// Some data with expected mean of 20
 	timers = make(map[string]Float64Slice)
-	timers["response_time"] = []float64{0, 30, 30}
+	timers["response_time"] = []float64{3, 0, 30, 30}
 
 	now := int64(1418052649)
 
@@ -652,7 +654,7 @@ func TestProcessSets(t *testing.T) {
 func TestProcessTimersUpperPercentile(t *testing.T) {
 	// Some data with expected 75% of 2
 	timers = make(map[string]Float64Slice)
-	timers["response_time"] = []float64{0, 1, 2, 3}
+	timers["response_time"] = []float64{4, 0, 1, 2, 3}
 
 	now := int64(1418052649)
 
@@ -675,7 +677,7 @@ func TestProcessTimersUpperPercentilePostfix(t *testing.T) {
 	flag.Set("postfix", ".test")
 	// Some data with expected 75% of 2
 	timers = make(map[string]Float64Slice)
-	timers["postfix_response_time"] = []float64{0, 1, 2, 3}
+	timers["postfix_response_time"] = []float64{4, 0, 1, 2, 3}
 	now := int64(1418052649)
 
 	var buffer bytes.Buffer
@@ -697,7 +699,7 @@ func TestProcessTimersUpperPercentilePostfix(t *testing.T) {
 
 func TestProcessTimesLowerPercentile(t *testing.T) {
 	timers = make(map[string]Float64Slice)
-	timers["time"] = []float64{0, 1, 2, 3}
+	timers["time"] = []float64{4, 0, 1, 2, 3}
 
 	now := int64(1418052649)
 
@@ -769,7 +771,11 @@ func TestMultipleUDPSends(t *testing.T) {
 }
 
 func BenchmarkManyDifferentSensors(t *testing.B) {
+	counters = make(map[string]float64)
+	gauges = make(map[string]float64)
+	timers = make(map[string]Float64Slice)
 	r := rand.New(rand.NewSource(438))
+
 	for i := 0; i < 1000; i++ {
 		bucket := "response_time" + strconv.Itoa(i)
 		for i := 0; i < 10000; i++ {
