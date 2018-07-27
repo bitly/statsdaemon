@@ -579,8 +579,8 @@ func main() {
 		fmt.Printf("statsdaemon v%s (built w/%s)\n", VERSION, runtime.Version())
 		return
 	}
-	*prefix = sanitizeBucket([]byte(*prefix))
-	*postfix = sanitizeBucket([]byte(*postfix))
+	flag.Set("prefix", sanitizeBucket([]byte(*prefix)))
+	flag.Set("postfix", sanitizeBucket([]byte(*postfix)))
 
 	signalchan = make(chan os.Signal, 1)
 	signal.Notify(signalchan, syscall.SIGTERM, syscall.SIGINT)
