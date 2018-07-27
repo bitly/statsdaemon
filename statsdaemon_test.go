@@ -202,21 +202,15 @@ func TestParseLineMisc(t *testing.T) {
 	assert.Equal(t, float32(1), packet.Sampling)
 
 	flag.Set("prefix", "test.")
+	flag.Set("postfix", ".test")
 	d = []byte("prefix:4|c")
 	packet = parseLine(d)
-	assert.Equal(t, "test.prefix", packet.Bucket)
+	// prefix/postfix not in Bucket/key, added in processCounters() etc
+	assert.Equal(t, "prefix", packet.Bucket)
 	assert.Equal(t, float64(4), packet.ValFlt)
 	assert.Equal(t, "c", packet.Modifier)
 	assert.Equal(t, float32(1), packet.Sampling)
 	flag.Set("prefix", "")
-
-	flag.Set("postfix", ".test")
-	d = []byte("postfix:4|c")
-	packet = parseLine(d)
-	assert.Equal(t, "postfix.test", packet.Bucket)
-	assert.Equal(t, float64(4), packet.ValFlt)
-	assert.Equal(t, "c", packet.Modifier)
-	assert.Equal(t, float32(1), packet.Sampling)
 	flag.Set("postfix", "")
 
 	d = []byte("a.key.with-0.dash:4|c\ngauge:3|g")
@@ -367,8 +361,9 @@ func TestMultiTcp(t *testing.T) {
 }
 
 func TestPacketHandlerReceiveCounter(t *testing.T) {
+	flag.Set("receive-counter", "countme")
+	receiveCount = 0
 	counters = make(map[string]float64)
-	*receiveCounter = "countme"
 
 	p := &Packet{
 		Bucket:   "gorets",
@@ -377,10 +372,11 @@ func TestPacketHandlerReceiveCounter(t *testing.T) {
 		Sampling: float32(1),
 	}
 	packetHandler(p)
-	assert.Equal(t, counters["countme"], float64(1))
-
+	assert.Equal(t, receiveCount, uint64(1))
 	packetHandler(p)
-	assert.Equal(t, counters["countme"], float64(2))
+	assert.Equal(t, receiveCount, uint64(2))
+
+	flag.Set("receive-counter", "")
 }
 
 func TestPacketHandlerCount(t *testing.T) {
@@ -491,8 +487,8 @@ func TestPacketHandlerSet(t *testing.T) {
 }
 
 func TestProcessCounters(t *testing.T) {
-
-	*persistCountKeys = int64(10)
+	flag.Set("persist-count-keys", "10")
+	receiveCount = 0
 	counters = make(map[string]float64)
 	var buffer bytes.Buffer
 	now := int64(1418052649)
@@ -504,7 +500,7 @@ func TestProcessCounters(t *testing.T) {
 	assert.Equal(t, buffer.String(), "gorets 123 1418052649\n")
 
 	// run processCounters() enough times to make sure it purges items
-	for i := 0; i < int(*persistCountKeys)+10; i++ {
+	for i := 0; i < int(*persistCountKeys); i++ {
 		num = processCounters(&buffer, now)
 	}
 	lines := bytes.Split(buffer.Bytes(), []byte("\n"))
@@ -513,6 +509,37 @@ func TestProcessCounters(t *testing.T) {
 	assert.Equal(t, len(lines), int(*persistCountKeys+2))
 	assert.Equal(t, string(lines[0]), "gorets 123 1418052649")
 	assert.Equal(t, string(lines[*persistCountKeys]), "gorets 0 1418052649")
+}
+
+func TestProcessCountersPrefix(t *testing.T) {
+	counters = make(map[string]float64)
+	var buffer bytes.Buffer
+	now := int64(1418052649)
+
+	flag.Set("persist-count-keys", "2")
+	flag.Set("prefix", "pre.")
+	flag.Set("postfix", ".post")
+
+	counters["gorets"] = float64(123)
+	num := processCounters(&buffer, now)
+	firstOutput := buffer.String()
+	// run processCounters() enough times to make sure it purges items
+	for i := 0; i < int(*persistCountKeys); i++ {
+		processCounters(&buffer, now)
+	}
+
+	// set back flags before asserting
+	flag.Set("persist-count-keys", "60")
+	flag.Set("prefix", "")
+	flag.Set("postfix", "")
+
+	assert.Equal(t, num, int64(1))
+	assert.Equal(t, firstOutput, "pre.gorets.post 123 1418052649\n")
+
+	lines := bytes.Split(buffer.Bytes(), []byte("\n"))
+	assert.Equal(t, string(lines[0]), "pre.gorets.post 123 1418052649")
+	assert.Equal(t, string(lines[1]), "pre.gorets.post 0 1418052649")
+	assert.Equal(t, string(lines[2]), "pre.gorets.post 0 1418052649")
 }
 
 func TestProcessTimers(t *testing.T) {
@@ -644,11 +671,11 @@ func TestProcessTimersUpperPercentile(t *testing.T) {
 }
 
 func TestProcessTimersUpperPercentilePostfix(t *testing.T) {
+	flag.Set("prefix", "pfx.")
 	flag.Set("postfix", ".test")
 	// Some data with expected 75% of 2
 	timers = make(map[string]Float64Slice)
-	timers["postfix_response_time.test"] = []float64{0, 1, 2, 3}
-
+	timers["postfix_response_time"] = []float64{0, 1, 2, 3}
 	now := int64(1418052649)
 
 	var buffer bytes.Buffer
@@ -658,12 +685,14 @@ func TestProcessTimersUpperPercentilePostfix(t *testing.T) {
 			"75",
 		},
 	})
-
 	lines := bytes.Split(buffer.Bytes(), []byte("\n"))
 
-	assert.Equal(t, num, int64(1))
-	assert.Equal(t, string(lines[0]), "postfix_response_time.upper_75.test 2 1418052649")
+	// set flags back before asserting
+	flag.Set("prefix", "")
 	flag.Set("postfix", "")
+
+	assert.Equal(t, num, int64(1))
+	assert.Equal(t, string(lines[0]), "pfx.postfix_response_time.upper_75.test 2 1418052649")
 }
 
 func TestProcessTimesLowerPercentile(t *testing.T) {

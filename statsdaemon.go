@@ -96,7 +96,7 @@ var (
 	debug             = flag.Bool("debug", false, "print statistics sent to graphite")
 	showVersion       = flag.Bool("version", false, "print version string")
 	deleteGauges      = flag.Bool("delete-gauges", true, "don't send values to graphite for inactive gauges, as opposed to sending the previous value")
-	persistCountKeys  = flag.Int64("persist-count-keys", 60, "number of flush-intervals to persist count keys")
+	persistCountKeys  = flag.Uint("persist-count-keys", 60, "number of flush-intervals to persist count keys (at zero)")
 	receiveCounter    = flag.String("receive-counter", "", "Metric name for total metrics received per interval")
 	percentThreshold  = Percentiles{}
 	prefix            = flag.String("prefix", "", "Prefix for all stats")
@@ -109,12 +109,13 @@ func init() {
 }
 
 var (
+	receiveCount    uint64
 	In              = make(chan *Packet, MAX_UNPROCESSED_PACKETS)
 	counters        = make(map[string]float64)
 	gauges          = make(map[string]float64)
 	timers          = make(map[string]Float64Slice)
-	countInactivity = make(map[string]int64)
 	sets            = make(map[string][]string)
+	inactivCounters = make(map[string]uint)
 )
 
 func monitor() {
@@ -139,10 +140,7 @@ func monitor() {
 }
 
 func packetHandler(s *Packet) {
-	if *receiveCounter != "" {
-		// if missing gets 0.0 (and adds 1 and stores)
-		counters[*receiveCounter] += 1
-	}
+	receiveCount++
 
 	switch s.Modifier {
 	case "ms":
@@ -224,21 +222,38 @@ func submit(deadline time.Time) error {
 
 func processCounters(buffer *bytes.Buffer, now int64) int64 {
 	var num int64
-	// continue sending zeros for counters for a short period of time even if we have no new data
-	for bucket, value := range counters {
-		fmt.Fprintf(buffer, "%s %s %d\n", bucket, strconv.FormatFloat(value, 'f', -1, 64), now)
-		delete(counters, bucket)
-		countInactivity[bucket] = 0
+	persist := *persistCountKeys
+
+	// avoid adding prefix/postfix to receiveCounter
+	if *receiveCounter != "" && receiveCount > 0 {
+		fmt.Fprintf(buffer, "%s %d %d\n", *receiveCounter, receiveCount, now)
+		if persist > 0 {
+			inactivCounters[*receiveCounter] = 0
+		}
 		num++
 	}
-	for bucket, purgeCount := range countInactivity {
+	receiveCount = 0
+
+	for bucket, value := range counters {
+		fullbucket := *prefix + bucket + *postfix
+		fmt.Fprintf(buffer, "%s %s %d\n", fullbucket, strconv.FormatFloat(value, 'f', -1, 64), now)
+		delete(counters, bucket)
+		if persist > 0 {
+			inactivCounters[fullbucket] = 0
+		}
+		num++
+	}
+
+	// continue sending zeros for no-longer-active counters for configured flush-intervals
+	for bucket, purgeCount := range inactivCounters {
 		if purgeCount > 0 {
 			fmt.Fprintf(buffer, "%s 0 %d\n", bucket, now)
 			num++
 		}
-		countInactivity[bucket] += 1
-		if countInactivity[bucket] > *persistCountKeys {
-			delete(countInactivity, bucket)
+		if purgeCount >= persist {
+			delete(inactivCounters, bucket)
+		} else {
+			inactivCounters[bucket] = purgeCount + 1
 		}
 	}
 	return num
@@ -248,7 +263,8 @@ func processGauges(buffer *bytes.Buffer, now int64) int64 {
 	var num int64
 
 	for bucket, currentValue := range gauges {
-		fmt.Fprintf(buffer, "%s %s %d\n", bucket, strconv.FormatFloat(currentValue, 'f', -1, 64), now)
+		valstr := strconv.FormatFloat(currentValue, 'f', -1, 64)
+		fmt.Fprintf(buffer, "%s%s%s %s %d\n", *prefix, bucket, *postfix, valstr, now)
 		num++
 		if *deleteGauges {
 			delete(gauges, bucket)
@@ -266,7 +282,7 @@ func processSets(buffer *bytes.Buffer, now int64) int64 {
 			uniqueSet[str] = true
 		}
 
-		fmt.Fprintf(buffer, "%s %d %d\n", bucket, len(uniqueSet), now)
+		fmt.Fprintf(buffer, "%s%s%s %d %d\n", *prefix, bucket, *postfix, len(uniqueSet), now)
 		delete(sets, bucket)
 	}
 	return num
@@ -275,7 +291,6 @@ func processSets(buffer *bytes.Buffer, now int64) int64 {
 func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 	var num int64
 	for bucket, timer := range timers {
-		bucketWithoutPostfix := bucket[:len(bucket)-len(*postfix)]
 		num++
 
 		sort.Sort(timer)
@@ -307,27 +322,25 @@ func processTimers(buffer *bytes.Buffer, now int64, pctls Percentiles) int64 {
 				maxAtThreshold = timer[indexOfPerc]
 			}
 
-			var tmpl string
-			var pctstr string
-			if pct.float >= 0 {
-				tmpl = "%s.upper_%s%s %s %d\n"
-				pctstr = pct.str
-			} else {
-				tmpl = "%s.lower_%s%s %s %d\n"
+			ptype := "upper"
+			pctstr := pct.str
+			if pct.float < 0 {
+				ptype = "lower"
 				pctstr = pct.str[1:]
 			}
 			threshold_s := strconv.FormatFloat(maxAtThreshold, 'f', -1, 64)
-			fmt.Fprintf(buffer, tmpl, bucketWithoutPostfix, pctstr, *postfix, threshold_s, now)
+			fmt.Fprintf(buffer, "%s%s.%s_%s%s %s %d\n",
+				*prefix, bucket, ptype, pctstr, *postfix, threshold_s, now)
 		}
 
 		mean_s := strconv.FormatFloat(mean, 'f', -1, 64)
 		max_s := strconv.FormatFloat(max, 'f', -1, 64)
 		min_s := strconv.FormatFloat(min, 'f', -1, 64)
 
-		fmt.Fprintf(buffer, "%s.mean%s %s %d\n", bucketWithoutPostfix, *postfix, mean_s, now)
-		fmt.Fprintf(buffer, "%s.upper%s %s %d\n", bucketWithoutPostfix, *postfix, max_s, now)
-		fmt.Fprintf(buffer, "%s.lower%s %s %d\n", bucketWithoutPostfix, *postfix, min_s, now)
-		fmt.Fprintf(buffer, "%s.count%s %d %d\n", bucketWithoutPostfix, *postfix, count, now)
+		fmt.Fprintf(buffer, "%s%s.mean%s %s %d\n", *prefix, bucket, *postfix, mean_s, now)
+		fmt.Fprintf(buffer, "%s%s.upper%s %s %d\n", *prefix, bucket, *postfix, max_s, now)
+		fmt.Fprintf(buffer, "%s%s.lower%s %s %d\n", *prefix, bucket, *postfix, min_s, now)
+		fmt.Fprintf(buffer, "%s%s.count%s %d %d\n", *prefix, bucket, *postfix, count, now)
 
 		delete(timers, bucket)
 	}
@@ -486,7 +499,7 @@ func parseLine(line []byte) *Packet {
 	}
 
 	return &Packet{
-		Bucket:   *prefix + sanitizeBucket(name) + *postfix,
+		Bucket:   sanitizeBucket(name),
 		ValFlt:   floatval,
 		ValStr:   strval,
 		Modifier: typeCode,
