@@ -140,20 +140,13 @@ func monitor() {
 
 func packetHandler(s *Packet) {
 	if *receiveCounter != "" {
-		v, ok := counters[*receiveCounter]
-		if !ok || v < 0 {
-			counters[*receiveCounter] = 0
-		}
+		// if missing gets 0.0 (and adds 1 and stores)
 		counters[*receiveCounter] += 1
 	}
 
 	switch s.Modifier {
 	case "ms":
-		_, ok := timers[s.Bucket]
-		if !ok {
-			var t Float64Slice
-			timers[s.Bucket] = t
-		}
+		// if missing gets nil []float64, works with append()
 		timers[s.Bucket] = append(timers[s.Bucket], s.ValFlt)
 	case "g":
 		gaugeValue, _ := gauges[s.Bucket]
@@ -178,16 +171,8 @@ func packetHandler(s *Packet) {
 
 		gauges[s.Bucket] = gaugeValue
 	case "c":
-		_, ok := counters[s.Bucket]
-		if !ok {
-			counters[s.Bucket] = 0
-		}
-		counters[s.Bucket] += s.ValFlt * float64(1/s.Sampling)
+		counters[s.Bucket] += s.ValFlt / float64(s.Sampling)
 	case "s":
-		_, ok := sets[s.Bucket]
-		if !ok {
-			sets[s.Bucket] = make([]string, 0)
-		}
 		sets[s.Bucket] = append(sets[s.Bucket], s.ValStr)
 	}
 }
