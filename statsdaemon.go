@@ -244,7 +244,9 @@ func submit(deadline time.Time) error {
 		return errors.New(errmsg)
 	}
 
-	log.Printf("sent %d stats to %s", num, *graphiteAddress)
+	if *debug {
+		log.Printf("sent %d stats to %s", num, *graphiteAddress)
+	}
 
 	return nil
 }
