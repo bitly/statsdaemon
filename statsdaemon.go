@@ -101,6 +101,7 @@ var (
 	percentThreshold  = Percentiles{}
 	prefix            = flag.String("prefix", "", "Prefix for all stats")
 	postfix           = flag.String("postfix", "", "Postfix for all stats")
+	heartbeatFilePath = flag.String("heartbeat-file", "", "heartbeat file to update after a successful write to graphite.")
 )
 
 func init() {
@@ -245,6 +246,9 @@ func submit(deadline time.Time) error {
 	}
 
 	log.Printf("sent %d stats to %s", num, *graphiteAddress)
+	if *heartbeatFilePath != "" {
+		heartbeat()
+	}
 
 	return nil
 }
@@ -569,6 +573,26 @@ func tcpListener() {
 			log.Fatalf("ERROR: AcceptTCP - %s", err)
 		}
 		go parseTo(conn, true, In)
+	}
+}
+
+func heartbeat() {
+	_, err := os.Stat(*heartbeatFilePath)
+	if os.IsNotExist(err) {
+		file, err := os.Create(*heartbeatFilePath)
+		if err != nil {
+			log.Fatalf("ERROR: Creating heartbeat file - %s", err)
+		}
+		defer file.Close()
+	} else {
+		currentTime := time.Now()
+		err = os.Chtimes(*heartbeatFilePath, currentTime, currentTime)
+		if err != nil {
+			log.Fatalf("ERROR: Touching %s", err)
+		}
+	}
+	if err != nil {
+		log.Fatalf("ERROR: %s", err)
 	}
 }
 
