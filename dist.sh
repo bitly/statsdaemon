@@ -19,9 +19,14 @@ for os in linux darwin freebsd; do
     BUILD=$(mktemp -d ${TMPDIR:-/tmp}/statsdaemon.XXXXXX)
     TARGET="statsdaemon-$version.$os-$arch.$goversion"
     GOOS=$os GOARCH=$arch CGO_ENABLED=0 go build -o $BUILD/$TARGET/statsdaemon
-    cd $BUILD
+
+    pushd $BUILD >/dev/null
     tar czvf $TARGET.tar.gz $TARGET
+    if [ -e $DIR/dist/$TARGET.tar.gz ]; then
+        echo "... WARNING overwriting dist/$TARGET.tar.gz"
+    fi
     mv $TARGET.tar.gz $DIR/dist
-    cd $DIR
+    echo "... built dist/$TARGET.tar.gz"
+    popd >/dev/null
     rm -r $BUILD
 done
