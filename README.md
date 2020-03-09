@@ -50,4 +50,5 @@ Usage of ./statsdaemon:
   -receive-counter="": Metric name for total metrics received per interval
   -tcpaddr="": TCP service address, if set
   -version=false: print version string
+  -heartbeat-file="": heartbeat file to update after a successful write to graphite
 ```
