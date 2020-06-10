@@ -23,7 +23,7 @@ Installing
 Pre-built binaries for darwin and linux.
 
 ### Current Stable Release: `v0.7.2`
-* [statsdaemon-0.7.2.darwin-amd64.go1.12.1.tar.gz](https://github.com/bitly/statsdaemon/releases/download/v0.7.1/statsdaemon-0.7.2.darwin-amd64.go1.12.1.tar.gz)
+* [statsdaemon-0.7.2.darwin-amd64.go1.12.1.tar.gz](https://github.com/bitly/statsdaemon/releases/download/v0.7.2/statsdaemon-0.7.2.darwin-amd64.go1.12.1.tar.gz)
 * [statsdaemon-0.7.2.linux-amd64.go1.12.1.tar.gz](https://github.com/bitly/statsdaemon/releases/download/v0.7.2/statsdaemon-0.7.2.linux-amd64.go1.12.1.tar.gz)
 * [statsdaemon-0.7.2.freebsd-amd64.go1.12.1.tar.gz](https://github.com/bitly/statsdaemon/releases/download/v0.7.2/statsdaemon-0.7.2.freebsd-amd64.go1.12.1.tar.gz)
 
