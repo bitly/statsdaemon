@@ -578,21 +578,20 @@ func tcpListener() {
 
 func heartbeat() {
 	_, err := os.Stat(*heartbeatFilePath)
-	if os.IsNotExist(err) {
+	if err != nil && os.IsNotExist(err) {
 		file, err := os.Create(*heartbeatFilePath)
 		if err != nil {
 			log.Fatalf("ERROR: Creating heartbeat file - %s", err)
 		}
 		defer file.Close()
-	} else {
-		currentTime := time.Now()
-		err = os.Chtimes(*heartbeatFilePath, currentTime, currentTime)
-		if err != nil {
-			log.Fatalf("ERROR: Touching %s", err)
-		}
-	}
-	if err != nil {
+	} else if err != nil {
 		log.Fatalf("ERROR: %s", err)
+	}
+
+	currentTime := time.Now()
+	err = os.Chtimes(*heartbeatFilePath, currentTime, currentTime)
+	if err != nil {
+		log.Fatalf("ERROR: Touching %s", err)
 	}
 }
 
