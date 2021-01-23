@@ -53,3 +53,57 @@ Usage of ./statsdaemon:
   -version=false: print version string
   -heartbeat-file="": heartbeat file to update after a successful write to graphite
 ```
+
+Docker Compose Playground
+=========================
+
+To try out the daemon, one can start a backend and frontend as Docker Services. For it to work a Docker SWARM is needed.
+
+```
+$ docker swarm init
+```
+
+After the initialisation, just start the services using the docker-cli.
+
+```
+$ docker stack deploy -c docker-compose.yml $(basename ${PWD})
+Creating service statsdaemon_frontend
+Creating service statsdaemon_influxdb
+```
+After a couple of seconds grafana4 is available under [localhost:3000](http://localhost:3000) (admin/admin).
+
+Now start the statsdaemon...
+
+```
+$ go build
+$ ./statsdaemon -address 0.0.0.0:8125
+2017/05/16 10:06:12 listening on 0.0.0.0:8125
+```
+
+...and begin to push metrics...
+
+```
+$ docker run -ti --rm --net=host -e HOST=192.168.1.11 qnib/plain-qframe-client delay.sh 10
+> execute CMD 'delay.sh 10'
+Send: delay:9000|ms to 192.168.1.11 && sleep 0.9000
+Send: delay:7300|ms to 192.168.1.11 && sleep 0.7300
+Send: delay:8100|ms to 192.168.1.11 && sleep 0.8100
+Send: delay:2500|ms to 192.168.1.11 && sleep 0.2500
+Send: delay:4100|ms to 192.168.1.11 && sleep 0.4100
+Send: delay:6000|ms to 192.168.1.11 && sleep 0.6000
+Send: delay:5200|ms to 192.168.1.11 && sleep 0.5200
+Send: delay:6500|ms to 192.168.1.11 && sleep 0.6500
+Send: delay:2800|ms to 192.168.1.11 && sleep 0.2800
+Send: delay:5300|ms to 192.168.1.11 && sleep 0.5300
+```
+
+... the daemon will forward it.
+
+```
+2017/05/16 10:06:42 sent 1 stats to 127.0.0.1:2003
+2017/05/16 10:06:52 sent 1 stats to 127.0.0.1:2003
+2017/05/16 10:07:02 sent 1 stats to 127.0.0.1:2003
+2017/05/16 10:07:12 sent 1 stats to 127.0.0.1:2003
+```
+
+![](pics/grafana_delay.png)

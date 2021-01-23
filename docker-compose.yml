@@ -1,0 +1,20 @@
+version: '3'
+services:
+  influxdb:
+    image: qnib/plain-influxdb
+    environment:
+     - INFLUXDB_META_LOGGING=true
+     - INFLUXDB_GRAPHITE_ENABLED=true
+    volumes:
+     - /opt/influxdb/shared
+    ports:
+     - 2003:2003
+     - 8083:8083
+     - 8086:8086
+  frontend:
+    image: qnib/plain-grafana4
+    ports:
+     - 3000:3000
+    environment:
+     - INFLUXDB_HOST=statsdaemon_influxdb
+     - INFLUXDB_DB=graphite
